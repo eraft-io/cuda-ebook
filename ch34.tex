@@ -1,0 +1,121 @@
+\section{L1缓存命中率为零的原因分析}
+
+\section*{摘要}
+本节课程继续探讨矩阵加法应用程序的性能分析，重点聚焦于L1和L2缓存命中率。通过回顾NVIDIAGPU（以Ampere架
+构为例）的内存层次结构，深入解析为何在矩阵加法中L1缓存命中率为零，并揭示NVIDIANsight Compute工具在
+统计L2缓存命中率时将所有写入操作视为“命中”的特殊机制。课程最后通过向量加法案例验证了这一结论，强调了在性能评估中区分
+读取命中率与总命中率的重要性。
+
+\subsection{引言：矩阵加法回顾}
+欢迎大家。本文章将继续讨论之前的应用程序案例，即两个矩阵相加并将结果存储在第三个矩阵中。具体而言，我们将矩阵A的所有元素
+与矩阵B的对应元素相加，结果存入矩阵C的对应位置（例如$4+7=11$）。在上一个文章中，我们已经讨论了矩阵相加的原理和
+概念。
+
+今天的主要目的是进行性能分析，重点关注L1和L2缓存的命中率。这部分内容至关重要，请大家务必注意。如有任何疑问，欢迎随时
+提出。
+
+\subsection{NVIDIA GPU内存层次结构回顾}
+为了理解缓存行为，我们需要回顾NVIDIAGPU的硬件实现。以下讲解基于NVIDIA白皮书中的内存层次结构图（以Volta或Ampere架构为例）。
+
+
+\subsection{全局内存与HBM}
+从最底层的全局内存（设备内存）开始，现代高端GPU通常采用HBM（High BandwidthMemory，高带宽内存）
+。相较于DDR3/4/5等传统内存，HBM以其极高的带宽著称。以A100GPU为例，其显存总线宽度超过5000位（远超CPU端常见的64位），带宽可达每秒1.5至1.9TB。这是一个极其庞大的数据传输能力。
+
+
+\subsection{L2缓存}
+L2缓存被划分为多个分区（Slice），在所有流式多处理器（SM）之间共享。HBM通过内存控制器连接到L2缓存。无论请求
+来自哪个SM，数据都可以通过L2缓存进行发送或接收。对于HBM2e等规格，L2缓存同样包含多个物理分区，数据可根据SM的
+访问请求在分区间移动。
+
+\subsection{L1数据缓存与共享内存}
+深入到单个SM内部，L1数据缓存与共享内存（SharedMemory）共用同一个物理存储单元。在Ampere架构中，该单
+元的最大容量为192KB。开发者可以配置应用程序，将此容量按需分配给共享内存和L1数据缓存（例如：100 KB用于共享内
+存，92KB用于L1缓存）。
+
+需要注意的是：
+\begin{itemize}
+    \item L1缓存仅在单个SM内部共享，不在不同SM之间共享。
+    \item 共享内存同理，仅局限于SM内部。
+\end{itemize}
+
+\subsection{数据访问流程与L1命中率分析}
+
+\subsection{数据加载路径}
+当应用程序运行时，数据通常初始存储于HBM中。当SM内的计算核心（ALU、TensorCore等）需要全局内存数据时，流
+程如下：
+\begin{enumerate}
+    \item 核心向加载/存储单元（Load/Store Unit）发送请求。
+    \item 加载/存储单元首先查询L1缓存。若命中，数据直接返回核心；若未命中，请求转发至L2缓存。
+    \item 若L2缓存命中，数据返回SM；若仍未命中，则向HBM发起请求。
+\end{enumerate}
+
+\subsection{为何矩阵加法的L1命中率为零？}
+在矩阵加法 $C = A + B$中，每个元素仅被访问一次：读取A的元素，读取B的元素，计算后写入C。由于没有数据复用（
+Reuse），同一个元素不会被再次读取。因此，理论上该应用的L1缓存命中率应为0。这与我们在NsightCompute中
+观察到的结果一致。
+
+相比之下，在矩阵乘法中，矩阵A的一行会与矩阵B的多列反复相乘，存在显著的数据复用，因此会产生大于零的L1/L2命中率。
+
+\textbf{注意：} 块大小（Block Size）的配置可能会影响实际的缓存行为，但基本原理不变。
+
+\subsection{L1缓存技术细节与合并访问}
+关于L1缓存的关键参数：
+\begin{itemize}
+    \item \textbf{最大容量：} 192 KB（可配置）。
+    \item \textbf{缓存行大小：} 128 Bytes。
+\end{itemize}
+
+\subsection{线程束（Warp）与内存合并}
+每个线程束由32个线程组成。当一个线程束执行加载指令时，32个线程在同一周期内发出请求。加载/存储单元会根据地址连续性将
+这些请求合并（Coalesce）。
+
+\textbf{示例：} 假设32个线程各加载一个4字节的浮点数，且内存地址连续。总数据量为 $32 \times 4
+= 128$ 字节，恰好等于一个缓存行的大小。此时，加载/存储单元会将32个独立请求合并为单次L1缓存行请求，极大提升效
+率。
+
+\subsection{L2缓存命中率的“秘密”：写入操作被视为命中}
+
+\subsection{观测到的异常现象}
+在矩阵加法测试中，虽然L1命中率为0，但L2总命中率却显示约为33\%。这与理论预期不符。
+
+\subsection{原因解析}
+这是NVIDIA NsightCompute工具的一个特殊统计机制：\textbf
+{L2缓存中的所有写入（Store）操作均被计为“命中”，即使实际并未命中缓存。}
+
+在矩阵加法中，每个元素对应三次操作：
+\begin{itemize}
+    \item 加载A（Read）：未命中
+    \item 加载B（Read）：未命中
+    \item 存储C（Write）：\textbf{被工具计为命中}
+\end{itemize}
+因此，命中率计算公式为：\[\text{L2 Hit Rate} = \frac{\text{Write Ops}}
+{\text{Read Ops}+ \text{Write Ops}} = \frac{100}
+{100 + 100 + 100} \approx33.3\%\]
+
+\subsection{验证实验}
+我们通过向量加法程序验证了这一结论：
+\begin{lstlisting}[language=bash, basicstyle=\ttfamily\small]
+使用Nsight Compute运行分析
+ncu --metrics l1tex__hit_rate,lts__hit_rate ./vector_add
+\end{lstlisting}
+
+结果显示：
+\begin{itemize}
+    \item L1命中率：0\%
+    \item L2总命中率：33.33\%
+    \item L2读取命中率（lts\_read\_hit\_rate）：$\approx 0\%$
+    \item L2写入命中率（lts\_write\_hit\_rate）：100\%
+\end{itemize}
+
+\subsection{关键结论与建议}
+\begin{enumerate}
+    \item 在矩阵加法等无数据复用的场景中，L1缓存命中率确实为0。
+    \item NVIDIA Nsight Compute将L2写入操作强制计为命中，导致L2总命中率虚高。
+    \item \textbf{性能评估建议：} 在评估L2缓存性能时，应仅关注\textbf{读取命中率}（Read Hit Rate），而非总命中率，以获得公平准确的评估。此规则不适用于L1缓存。
+\end{enumerate}
+
+\section*{结语}
+今天的课程到此结束。希望大家已理解矩阵加法中缓存命中率的成因及工具统计特性。如有疑问，欢迎发送邮件或在NVIDIA开发者
+论坛中搜索相关讨论，那里包含大量宝贵信息。下个文章见！
+

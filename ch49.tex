@@ -1,0 +1,72 @@
+\section{CUDA GPU并行编程：张量核心实战评估}
+
+
+\subsection{引言}
+在本节文章中，我们将通过实际基准测试展示使用张量核心（TensorCores）相比普通CUDA核心所能获得的性能提升。为
+了聚焦核心对比，本次演示仅选取两个代表性应用程序进行测试，而非此前预告的四个。后续文章将详细讲解其他应用场景及张量核心的
+多种编程方法。本节旨在直观呈现硬件加速带来的收益，暂不涉及应用本身的算法原理。
+
+\subsection{实验环境与配置}
+\subsection{矩阵参数与精度}
+两个测试程序均执行 $1024 \times 1024$方阵乘法运算，且统一采用半精度浮点数（FP16）。两者唯一的区别
+在于计算单元的选择：朴素版本使用标准CUDA核心，而加速版本调用张量核心API。
+
+\subsection{编译注意事项}
+在编译过程中需特别注意架构参数的指定。
+
+\subsection{朴素版本编译}
+朴素版本的编译命令如下：
+\begin{lstlisting}
+nvcc -o naive naive.cu
+\end{lstlisting}
+该命令可正常生成可执行文件。
+
+\subsection{张量核心版本编译陷阱}
+若直接使用默认参数编译张量核心版本：
+\begin{lstlisting}
+nvcc -o tensor tensor.cu
+\end{lstlisting}
+编译器将报错，提示“名称后跟‘::’必须是类或命名空间”。这是因为未指定目标架构时，\texttt{nvcc}可能默认回
+退至较旧的计算能力（如 Compute Capability 5.x），而该架构不支持张量核心相关指令。
+
+\subsection{解决方案：指定计算能力}
+必须显式添加 \texttt{-arch} 参数以匹配目标GPU架构。例如，针对 Ampere 架构（RTX30系列/A
+100等），应使用 \texttt{sm\_80}：
+\begin{lstlisting}
+nvcc -o tensor tensor.cu -arch=sm_80
+\end{lstlisting}
+\begin{itemize}
+    \item \textbf{背景知识}：张量核心于2017年随 Volta 架构（Compute Capability 7.x）首次引入。若使用 CC 5.x 编译，等同于在张量核心诞生前的架构上构建代码，必然导致符号缺失。
+    \item \textbf{最佳实践}：建议在所有涉及新特性的编译中始终明确指定 \texttt{-arch} 参数，确保编译器启用正确的指令集与内建函数。
+\end{itemize}
+
+\subsection{性能评估结果}
+使用 NVIDIA Nsight Compute (\texttt{ncu}) 工具测量内核执行时间，对比结果如下：
+
+\subsection{基准测试 ($1024 \times 1024$)}
+\begin{itemize}
+    \item \textbf{朴素版本}：2.454 ms
+    \item \textbf{张量核心版本}：577 $\mu$s (0.577 ms)
+    \item \textbf{加速比}：$\frac{2454}{577} \approx 4.25\times$
+\end{itemize}
+注：本测试基于消费级 RTX 3060 显卡。若使用 HPC 专用卡（如 A100），预期加速比可达 7--9 倍。
+
+\subsection{规模扩展测试 ($2048 \times 2048$)}
+增大矩阵尺寸以观察性能差异的变化趋势：
+\begin{itemize}
+    \item \textbf{朴素版本}：20.17 ms
+    \item \textbf{张量核心版本}：2.73 ms
+    \item \textbf{加速比}：$\frac{20.17}{2.73} \approx 7.39\times$
+\end{itemize}
+结果表明，随着问题规模增大，张量核心的吞吐优势更加显著。
+
+\subsection{讨论与总结}
+\subsection{无优化下的纯硬件收益}
+上述性能提升完全源于硬件差异，未对代码进行任何额外优化（如内存访问模式调整或共享内存分块优化）。两个版本均已使用共享内存
+，但仅此而已。若在张量核心版本基础上进一步实施软件层面优化，性能仍有巨大提升空间。
+
+\subsection{后续内容预告}
+下一讲将系统介绍张量核心的编程工具链。不同于多数教程仅关注 cuBLAS/cuDNN 等高层库，本课程将深入讲解底层WMMA (Warp Matrix Multiply-Accumulate)API，这是实现精细化张量核心控制的关键技术，也
+
+是本课程的独家重点内容。
+

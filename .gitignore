@@ -1,0 +1,24 @@
+# LaTeX build output
+*.aux
+*.log
+*.toc
+*.lof
+*.lot
+*.out
+*.xdv
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.synctex(busy)
+
+# Editor/IDE
+.DS_Store
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Python bytecode
+__pycache__/
+*.pyc

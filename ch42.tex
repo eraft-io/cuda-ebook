@@ -1,0 +1,104 @@
+\title{\textbf{CUDA GPU并行编程：共享内存与循环展开优化技术}}
+\author{课程笔记整理}
+
+\section{NVIDIA GPU内存层级回顾}
+在深入优化之前，必须清晰理解GPU内部的内存层级及其特性。从慢到快依次为：
+\begin{enumerate}
+    \item \textbf{全局内存（Global Memory）}：容量最大但延迟最高（约300周期），是所有SM最终访问的存储层。
+    \item \textbf{L2缓存}：所有SM共享，延迟约180--200周期。
+    \item \textbf{L1缓存 / 共享内存}：位于SM内部，二者共用同一物理片上存储单元。L1由硬件自动管理，而共享内存是\textbf{可编程}的显式存储器。访问L1需Tag查找（约30周期），而共享内存无此开销（约23--25周期），因此理论延迟更低。
+    \item \textbf{寄存器（Registers）}：速度最快，由编译器分配给每个线程私有使用。
+\end{enumerate}
+
+\noindent \textbf{重要提示}：在之前的全局内存归约实现中，数据加载时已隐式经过L1/L2缓存。若仅简单将数据搬入共享内存而不改变访存模式，性能提升有限（通常仅10\%--20\%）。共享内存的真正价值在于\textbf{配合算法重构}（如循环展开、消除Bank冲突）才能释放其低延迟优势。
+
+\subsection{共享内存优化实现}
+\subsection{核心改动}
+在前一版“每线程处理2元素”的基础上，引入共享内存的关键修改如下：
+\begin{itemize}
+    \item 声明块级共享数组：\verb|__shared__ float sdata[BLOCK_SIZE];|，每个Block独立分配；
+    \item 预归约阶段：将全局内存中后半段数据加到前半段，结果直接写入\verb|sdata|而非全局内存；
+    \item 同步屏障：\verb|__syncthreads()|确保所有线程完成加载后再进入归约循环；
+    \item 归约循环：全程在\verb|sdata|上进行读写，避免重复访问全局内存；
+    \item 边界安全：使用三元运算符防止越界读取垃圾值。
+\end{itemize}
+
+\subsection{边界检查的重要性}
+当向量长度不是块大小的整数倍时，必须对超出范围的索引返回0而非未定义值：
+\begin{lstlisting}[caption={安全的共享内存加载}]
+// 安全加载：越界时补0，避免垃圾值污染归约结果
+float val = (index < n) ? g_idata[index] : 0.0f;
+float val2 = (index + blockDim.x < n) ? g_idata[index + blockDim.x] : 0.0f;
+sdata[tid] = val + val2;
+\end{lstlisting}
+
+\subsection{性能实测与瓶颈分析}
+\begin{table}[h!]
+\centering
+\caption{不同优化阶段的执行时间对比}
+\begin{tabular}{lcc}
+\toprule
+优化策略 & 执行时间 ($\mu s$) & 相对基准提升 \\
+\midrule
+基准（含分支发散） & 283 & -- \\
+移除分支 + 每线程2元素 & 100 & 2.83$\times$ \\
++ 共享内存 & 103 & 2.75$\times$ \\
++ 循环展开 & 90 & 3.14$\times$ \\
++ 块大小调优（128线程） & 82 & 3.45$\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent 单纯引入共享内存后性能反而略降（103 vs 100 $\mu s$），原因在于：
+\begin{itemize}
+    \item 前版已受益于L1缓存的隐式重用；
+    \item 共享内存引入了额外的\verb|__syncthreads()|同步开销；
+    \item 未改变访存步长模式，未能消除潜在的Bank Conflict风险。
+\end{itemize}
+
+\subsection{循环展开（Loop Unrolling）优化}
+\subsection{优化动机}
+标准归约循环中，每次迭代都包含一次\verb|__syncthreads()|。当步长小于Warp大小（32）时，所有活
+跃线程属于同一Warp，硬件保证SIMT锁步执行，\textbf{无需显式同步}。利用此特性可将最后5次迭代（stride=16,8,4,2,1）展开为无同步的顺序代码。
+
+\subsection{设备函数封装}
+使用\verb|__device__|函数封装尾部展开逻辑，由主Kernel在stride<32时调用：
+\begin{lstlisting}[caption={Warp级循环展开设备函数}]
+__device__ void warpReduce(volatile float* sdata, int tid) {
+    // Warp内32线程锁步执行，无需__syncthreads()
+    sdata[tid] += sdata[tid + 16];
+    sdata[tid] += sdata[tid + 8];
+    sdata[tid] += sdata[tid + 4];
+    sdata[tid] += sdata[tid + 2];
+    sdata[tid] += sdata[tid + 1];
+}
+\end{lstlisting}
+
+\noindent \textbf{关键技术点}：
+\begin{itemize}
+    \item 使用\verb|volatile|关键字防止编译器将共享内存读写优化到寄存器，确保跨线程可见性；
+    \item 展开后消除5次同步屏障，显著降低流水线停顿；
+    \item 实测执行时间从103 $\mu s$降至90 $\mu s$，提升约12.6\%。
+\end{itemize}
+
+\subsection{块大小调优与综合优化}
+通过实验发现，将块大小从256调整为128后，结合共享内存与循环展开，执行时间进一步降至82 $\mu s$。原因包括：
+\begin{itemize}
+    \item 更小的块提高SM并发块数，改善占用率；
+    \item 减少每块共享内存用量，允许更多块驻留；
+    \item 更好的指令缓存局部性。
+\end{itemize}
+
+\noindent \textbf{重要提醒}：最优块大小高度依赖GPU架构、问题规模及访存模式，必须通过Profiling驱动的实验确定，不可盲目套用经验值。
+
+\subsection{总结与进阶方向}
+本节验证了以下核心结论：
+\begin{enumerate}
+    \item 共享内存本身不是银弹，必须与算法重构结合才能体现价值；
+    \item 循环展开通过消除Warp级冗余同步获得稳定收益；
+    \item 块大小是影响占用率与资源竞争的关键超参数，需实测调优；
+    \item Bank Conflict检测（Nsight Compute Memory Workload Analysis）是共享内存优化的必要诊断步骤。
+\end{enumerate}
+
+\noindent 后续可探索的方向包括：模板元编程消除运行时分支、多级归约减少原子操作、以及使用CUB/Thrust库的生产级实现。建议读者结合NVIDIA官方《CUDA Best Practices Guide》第5章及本课程配套代码仓库进行动手实践。
+

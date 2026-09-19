@@ -1,0 +1,54 @@
+\section{GPU 和 GPU 芯片}
+
+\subsection{GPU芯片的定义}
+
+今天我们将比较两个主要术语，GPU和GPU芯片。这个文章非常重要，因为如果不理解GPU和GPU芯片之间的区别，我们就无法
+解释英伟达生产的各种架构。
+
+一开始，我想阐明这两个主要术语之间的区别，从GPU芯片开始，GPU芯片代表着GPU的心脏，它是实际的硅核心或电子芯片，没
+有任何外围设备。例如，这是一个名为GF100的GPU芯片，这里的F指的是Fermi架构。在这个芯片内部，有各种核心内存控
+制器和其他负责GPU计算的电子元件。GPU是消费者购买的最终产品，让我们解释一下这与GPU有何不同。它集成了芯片以及必要
+的系统和接口，包括在许多GPU中都存在的冷却机制。
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.75\linewidth]{resources/cuda-017.png}
+    \caption{GPU 和 GPU 芯片}
+    \label{fig:placeholder}
+\end{figure}
+
+
+\subsection{GeForce GTX480与GF100芯片}
+
+这款GPU由我们上一张幻灯片讨论过的GF100芯片驱动。例如这张图片代表的是 GeForce GTX480GPU。除了G
+F100芯片，该GPU还包含全局内存单元显示端口，如HDMI端口和一个冷却风扇。我们这里有一个冷却风扇，因为这款GPU是
+基于GeForce 世代的，而这些环境需要一个冷却风扇来散发计算产生的热量。
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.75\linewidth]{resources/cuda-018.png}
+    \caption{GPU 和 GPU 芯片}
+    \label{fig:placeholder}
+\end{figure}
+
+根据我们之前的讨论，我们知道GeForce世代是为常规使用或普通消费者正常的台式机和工作站设计的。
+
+\subsection{A100与GA100芯片}
+
+这两个术语之间区别的另一个例证可以从A100 GPU及其芯片中看到。基于Ampire架构的A100GPU，其名称中的字母
+A标识了这一点。与Fermi芯片类似的命名方式，驱动A100 GPU 的芯片为 GA100。
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.75\linewidth]{resources/cuda-019.png}
+    \caption{GA100芯片}
+    \label{fig:placeholder}
+\end{figure}
+
+在Fermi架构中，芯片命名为GF100。在Ampire架构中，芯片命名为 GA100。如果我们访问 techpowerup网站，我们可以看到A100 GPU的众多规格。这个网页上首先提到的是芯片名称，如这部分所示。它被称为GA100。通过
+
+搜索芯片名称GA100，我们在这里找到一个链接。让我们点击这个链接，这就是GA100芯片。如图所示，它看起来是这个样子，
+它仅仅是电子芯片，没有连接任何其他组件。
+
+再次回顾A100 GPU的网页，正如我们所看到的，A100GPU包含芯片，一些内存单元和其他外围设备。总而言之，GPU芯
+片通常是GPU的心脏或大脑，而GPU本身是包含芯片、内存接口和冷却系统的最终产品。这个产品已经准备好供消费者使用。

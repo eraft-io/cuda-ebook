@@ -1,0 +1,128 @@
+\section{CUDA GPU并行编程：Float4向量化优化矩阵乘法}
+
+\subsection{前言与背景回顾}
+
+在前序课程中，我们讨论了矩阵乘法（GEMM）的分块（Tiling）策略。由于矩阵规模通常远超单个流式多处理器（SM）的存
+储容量，必须将矩阵分割为若干“小块”（Tile）。若不分块，仅在一个SM上执行计算会导致其他SM闲置，造成硬件资源浪费。
+
+\subsection{核心概念辨析}
+\begin{itemize}
+    \item \textbf{小块（Tile）}：指矩阵数据被分割后的逻辑子矩阵。
+    \item \textbf{线程块（Thread Block）}：指CUDA编程模型中的执行单元集合。
+\end{itemize}
+
+\textbf{关键映射关系}：C矩阵的一个小块对应一个CUDA线程块。若C矩阵被分为$N$个小块，则需要$N$个线程块
+。每个线程块负责计算C矩阵中对应小块的所有元素。需要注意的是，计算C的一个小块需要循环遍历K维度上所有对应的A和B的小块
+，累加部分和（Partial Sum）才能得到最终结果。
+
+\subsection{优化动机：计算与内存受限}
+
+朴素版本及基础共享内存版本的矩阵乘法同时面临两类瓶颈：
+\begin{enumerate}
+    \item \textbf{计算受限（Compute-bound）}：算术运算指令过多，包括循环控制开销。
+    \item \textbf{内存受限（Memory-bound）}：全局内存带宽不足，访存延迟高。
+\end{enumerate}
+
+本节课介绍的 \texttt{float4} 向量化优化旨在同时改善上述两个问题，使屋顶线模型（RooflineModel）中的性能点向更高算力利用率方向移动。
+
+
+\subsection{优化原理}
+
+\subsection{循环展开（Loop Unrolling）}
+循环展开通过减少循环控制指令（如计数器递增、条件跳转）来降低非计算指令的比例。例如，将大小为16的循环完全展开，可消除1
+6次循环判断开销，直接提升计算密集型任务的性能。
+
+\subsection{向量化加载与预取（Vectorized Load \& Prefetching）}
+利用 \texttt{float4} 数据类型，单条指令即可加载4个连续的浮点数。这相当于一种“内存级循环展开”：
+\begin{itemize}
+    \item \textbf{带宽利用率提升}：一次128-bit内存事务替代四次32-bit事务。
+    \item \textbf{指令数减少}：加载相同数量元素所需的指令数降为原来的1/4。
+\end{itemize}
+
+\subsection{线程配置调整}
+由于采用 \texttt{float4} 加载，X维度的线程需求发生变化：
+\begin{itemize}
+    \item \textbf{原方案}：$16 \times 16$ 小块，X维度需16个线程，每线程加载1个元素。
+    \item \textbf{新方案}：$16 \times 16$ 小块，X维度仅需4个线程，每线程加载4个元素（\texttt{float4}）。
+    \item \textbf{Y维度}：保持不变，仍需16个线程处理16行。
+\end{itemize}
+因此，每个线程块处理的总工作量不变，但活跃线程数减少，单线程工作负载增加。
+
+\subsection{内存布局约束}
+\texttt{float4}要求内存地址连续且对齐。由于矩阵采用行主序（Row-major）存储，同一行的元素在物理内
+存中连续，而跨行元素不连续。因此，\textbf{向量化加载必须沿X维度（列方向）进行}，Y维度保持标量迭代。
+
+\subsection{代码实现要点}
+
+\subsection{累加器声明}
+由于每个线程现在负责C矩阵中的4个元素（同一行相邻4列），需声明4个独立的累加器以消除数据依赖，便于流水线执行：
+\begin{lstlisting}[style=mystyle]
+float sum0 = 0.0f, sum1 = 0.0f, sum2 = 0.0f, sum3 = 0.0f;
+// 或使用数组 float sum[4] = {0};
+\end{lstlisting}
+
+\subsection{全局内存到共享内存的向量化加载}
+加载矩阵A和B时，使用 \texttt{float4} 指针进行类型转换与读取：
+
+\begin{lstlisting}[style=mystyle]
+// 计算全局内存中的float4指针地址
+// threadIdx.x * 4 是因为每个线程负责4列
+const float4* a_ptr = reinterpret_cast<const float4*>(
+    &A[base_offset + row * N + threadIdx.x * 4]
+);
+
+// 从全局内存加载float4到寄存器
+float4 reg_a = *a_ptr;
+
+// 写入共享内存（需注意共享内存布局）
+// 此处可能需要reinterpret_cast以确保地址对齐正确
+reinterpret_cast<float4*>(&SA[shared_offset])[threadIdx.x] = reg_a;
+\end{lstlisting}
+
+\textbf{注意}：全局内存与共享内存的地址空间不同，使用 \texttt{reinterpret\_cast} 是
+为了满足编译器对 \texttt{float4} 对齐的要求，避免警告并确保生成正确的128-bit加载指令（
+如 \texttt{LDG.E.128}）。
+
+\subsection{计算阶段的向量化访问}
+在共享内存中进行乘加运算时，利用 \texttt{float4} 的成员访问语法：
+\begin{lstlisting}[style=mystyle]
+// 假设已从共享内存加载了float4类型的B片段
+float4 reg_b = ...; 
+
+sum0 += SA[...] * reg_b.x;
+sum1 += SA[...] * reg_b.y;
+sum2 += SA[...] * reg_b.z;
+sum3 += SA[...] * reg_b.w;
+\end{lstlisting}
+这种显式展开写法避免了循环依赖，有利于编译器调度指令。
+
+\subsection{性能评估}
+
+在相同硬件环境下，三种实现的执行时间对比如下：
+
+\begin{table}[h!]
+\centering
+\caption{矩阵乘法优化性能对比}
+\begin{tabular}{lcc}
+\toprule
+\textbf{优化版本} & \textbf{执行时间 ($\mu$s)} & \textbf{相对加速比} \\
+\midrule
+Naive（朴素版） & 360 & 1.0x \\Shared Memory（共享内存版） & 250 & 1.44x \\
+\textbf{Float4 Vectorized（本课优化）} & \textbf{148} & \textbf{2.43x} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{结果分析}：相较于共享内存版本，\texttt{float4}优化进一步减少了约100$\mu$s的执行
+时间。屋顶线分析表明，该优化有效缓解了内存带宽压力，同时将性能点推向了计算与内存平衡的过渡区域（TransitionPoint），验证了向量化加载对双重瓶颈的改善效果。
+
+
+\subsection{总结}
+\begin{enumerate}
+    \item \texttt{float4} 优化的核心是\textbf{向量化内存访问}，而非改变矩阵的存储分配方式。
+    \item 必须严格遵循\textbf{行主序}的内存连续性要求，仅在列方向（X维）应用向量化。
+    \item 线程配置需相应调整：X维度线程数除以4，Y维度不变。
+    \item 配合循环展开与多累加器设计，可同时缓解计算与内存瓶颈。
+    \item 实际编码中需注意类型转换（\texttt{reinterpret\_cast}）以满足对齐要求。
+\end{enumerate}
+

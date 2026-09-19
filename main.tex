@@ -1,0 +1,153 @@
+\documentclass[12pt]{article}
+\usepackage[UTF8]{ctex} 
+\usepackage[hidelinks]{hyperref}
+\usepackage{listings}
+
+\usepackage{graphicx}
+\usepackage{float} 
+\usepackage{subfigure}
+\usepackage{amsmath} 
+\usepackage{booktabs}
+\usepackage{tcolorbox}
+
+% 加宽目录编号区域，避免 100+ 编号与文字重叠
+\makeatletter
+\renewcommand*{\l@section}{\@dottedtocline{1}{1.5em}{3.2em}}
+\renewcommand*{\l@subsection}{\@dottedtocline{2}{4.7em}{3.5em}}
+\makeatother
+
+% 图片计数
+\usepackage{chngcntr}
+\counterwithin{figure}{section}
+\renewcommand{\thesubfigure}{\arabic{subfigure}}
+
+\lstset{
+   % language=Python, % 设置语言
+ basicstyle=\ttfamily, % 设置字体族
+ breaklines=true, % 自动换行
+ keywordstyle=\bfseries\color{NavyBlue}, % 设置关键字为粗体，颜色为 NavyBlue
+ morekeywords={}, % 设置更多的关键字，用逗号分隔
+ emph={self}, % 指定强调词，如果有多个，用逗号隔开
+    emphstyle=\bfseries\color{Rhodamine}, % 强调词样式设置
+    commentstyle=\itshape\color{black!50!white}, % 设置注释样式，斜体，浅灰色
+    stringstyle=\bfseries\color{PineGreen!90!black}, % 设置字符串样式
+    columns=flexible,
+    numbers=left, % 显示行号在左边
+    numbersep=2em, % 设置行号的具体位置
+    numberstyle=\footnotesize, % 缩小行号
+    frame=single, % 边框
+    framesep=1em % 设置代码与边框的距离
+}
+
+\lstdefinestyle{mystyle}{basicstyle=\ttfamily, breaklines=true, keywordstyle=\bfseries, commentstyle=\itshape\color{black!50!white}, stringstyle=\bfseries, columns=flexible, numbers=left, numbersep=2em, numberstyle=\footnotesize, frame=single, framesep=1em}
+
+\begin{document}
+
+\tableofcontents
+\newpage
+
+\input{ch1.tex}
+
+\input{ch2.tex}
+
+\input{ch3.tex}
+
+\input{ch4.tex}
+
+\input{ch5.tex}
+
+\input{ch6.tex}
+
+\input{ch7.tex}
+
+\input{ch8.tex}
+
+\input{ch9.tex}
+
+\input{ch10.tex}
+
+\input{ch11.tex}
+
+\input{ch12.tex}
+
+\input{ch13.tex}
+
+\input{ch14.tex}
+
+\input{ch15.tex}
+
+\input{ch16.tex}
+
+\input{ch17.tex}
+
+\input{ch18.tex}
+
+\input{ch19.tex}
+
+\input{ch20.tex}
+
+\input{ch21.tex}
+
+\input{ch22.tex}
+
+\input{ch23.tex}
+
+\input{ch24.tex}
+
+\input{ch25.tex}
+
+\input{ch26.tex}
+
+\input{ch27.tex}
+
+\input{ch28.tex}
+
+\input{ch29.tex}
+
+\input{ch30.tex}
+
+\input{ch31.tex}
+
+\input{ch32.tex}
+
+\input{ch33.tex}
+
+\input{ch34.tex}
+
+\input{ch35.tex}
+
+\input{ch36.tex}
+
+\input{ch37.tex}
+
+\input{ch38.tex}
+
+\input{ch39.tex}
+
+\input{ch40.tex}
+
+\input{ch41.tex}
+
+\input{ch42.tex}
+
+\input{ch43.tex}
+
+\input{ch44.tex}
+
+\input{ch45.tex}
+
+\input{ch46.tex}
+
+\input{ch47.tex}
+
+\input{ch48.tex}
+
+\input{ch49.tex}
+
+\input{ch50.tex}
+
+\input{ch51.tex}
+
+\input{ch52.tex}
+
+\end{document}

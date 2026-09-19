@@ -1,0 +1,316 @@
+\section{Visual Studio调试技巧（第一部分）}
+
+\subsection{课程前言与工具回顾}
+大家好。在今天的文章中，我将讲解本课程的第一个调试工具。在正式开始之前，我想先回顾一下：在本课程的每个阶段，我都会介绍一
+款用于调试、性能分析或性能评估的工具。
+
+例如，在第一集中，我讲解了 \textbf{NVIDIA Nsight Compute}工具，包括其命令行分析和图形用户
+界面（GUI）的使用方法。这是一个非常有用的工具，它可以帮你计算执行时间、流式多处理器（SM）利用率、占用率、内存带宽，
+以及一级缓存和二级缓存的命中率。它甚至能提供可视化图表，帮助你寻找应用程序中的性能瓶颈。
+
+\subsection{本节课目标：向量归约与调试需求}
+今天我们将进入第二集。在第一集（入门级）中，我们讲解的是一个简单的向量加法应用程序；而今天，我们将要讲解的
+是\textbf{向量归约（Vector Reduction）} 应用程序。
+
+针对这种更复杂的逻辑，我们需要的不仅仅是性能分析工具，更需要一个\textbf{调试工具}。我们需要通过调试工具在特定指
+令旁添加断点来暂停执行，从而观察程序到达该指令时的状态：内存状态如何？变量的值是多少？这就是今天文章的主要目的。
+
+\subsection{NVIDIA Nsight Visual Studio Edition 简介}
+我们将要使用的工具是 \textbf{NVIDIA Nsight Visual StudioEdition}。之所以称为
+“集成（Integrated）”，是因为它必须与 Visual Studio应用程序集成使用。这与 NVIDIA Nsight Compute、Nsight Systems 或 NsightGraphics 不同，后三者通常是独立运行的工具
+
+。
+
+\subsection{安装方法}
+关于如何安装该工具，你可以查看官方安装文档或使用手册。安装主要有两种方式：
+\begin{enumerate}
+    \item 直接从 Visual Studio 内部安装。
+    \item 通过 Visual Studio Marketplace 安装。
+\end{enumerate}
+接下来我将演示第一种方法（我也会将这些链接作为资源添加到本教程中）。
+
+\subsection{安装步骤}
+\begin{enumerate}
+    \item 打开 Visual Studio。
+    \item 在顶部菜单栏中，点击 \textbf{扩展 (Extensions)} 菜单，选择 \textbf{管理扩展 (Manage Extensions)}。
+    \item 在搜索框中输入 ``Insight''。
+    \item 找到 \textbf{NVIDIA Nsight Visual Studio Edition (64-bit)}（如果你使用的是32位系统，也可以安装32位版本）。
+    \item 点击 \textbf{安装 (Install)} 按钮。
+    \item 安装完成后，你需要 \textbf{关闭 Visual Studio 并重新打开}，以完成安装步骤。关闭时可能会弹出一些浏览器窗口或提示框，按照提示操作即可。
+\end{enumerate}
+这一步非常简单，没有什么困难的地方。
+
+\subsection{工具界面与功能概览}
+重新打开 Visual Studio 后，再次点击 \textbf{扩展 (Extensions)} 菜单，你会看
+到\textbf{Nsight} 子菜单。这里列出了你在 NVIDIA Nsight 调试工具中可以找到的选项。
+
+\subsection{集成工具入口}
+菜单中的前三个选项与你操作系统上安装的其他 Nsight 工具相关。也就是说，如果你的操作系统上未安装 NVIDIANsight Compute、Nsight Graphics 或 Nsight Systems，这里可能不会显示它们。
+
+
+例如，在我的系统中搜索 ``Insight'' 后，可以看到已经安装了 Nsight Compute、NsightSystems 甚至 Nsight Graphics。这意味着你可以非常方便地直接从 Visual Studio内部打开这些工
+
+具来分析你的应用程序。
+
+\textbf{优势：} 你不需要专门去开始菜单打开 Nsight Compute，然后再尝试将进程附加（Attach）
+到工具上才能启动性能分析。现在这些繁琐的步骤都不需要了。你只需打开你的 CUDA 应用程序，转到 \textbf
+{扩展 $\rightarrow$ Nsight $\rightarrow$ Compute $\rightarrow$ Profile}
+即可直接开始分析。同样的方法也适用于 Nsight Graphics 工具。
+
+\subsection{核心调试选项}
+除了上述集成入口，菜单中还有其他用于调试的选项，这些代表了此扩展的主要目标。你将看到如下选项：
+\begin{itemize}
+    \item \textbf{Start CUDA Debugging (Next-Gen)}：启动 CUDA 调试。
+    \item \textbf{Break on Launch}：在启动时中断。
+    \item \textbf{Freeze}：冻结线程等选项。
+    \item \textbf{Options}：在选项中你可以更改一些设置。
+\end{itemize}
+
+以上内容就是我们在开始阶段需要了解和使用的内容摘要。相关文档链接（NVIDIA Nsight Visual StudioEdition）我也会添加进本讲资源中。
+
+
+\subsection{CUDA GPU并行编程课程笔记：Visual Studio调试技巧（第二部分）}
+
+\subsection{调试器的核心功能与界面概览}
+正如上一讲所述，你需要安装这个独立的工具，它将为 Visual Studio增添强大的调试功能。通过该调试器，你可以直观
+地查看以下关键信息：
+\begin{itemize}
+    \item \textbf{内存状态}：查看显存或内存中的数据变化。
+    \item \textbf{线程信息}：查看当前的线程数量及状态。
+    \item \textbf{GPU 寄存器}：直接观察 GPU 寄存器中的数值。
+    \item \textbf{汇编代码}：查看 CUDA 代码对应的底层汇编指令。
+    \item \textbf{内置变量}：查看块 ID（Block ID）、线程 ID（Thread ID）以及应用程序中的其他自定义变量。
+\end{itemize}
+
+这就是我们所说的“调试”。你可以在代码的特定行设置断点，程序的执行会在此处暂停。这将让我们深入了解当程序运行到这条指令时
+，汇编代码层面以及寄存器中每个变量究竟发生了什么。
+
+\subsection{准备工作与文档资源}
+在开始今天的实战之前，请确保你已经安装了上述提到的两个工具（Nsight Visual Studio Edition及其
+依赖组件）。我会将相关下载链接添加到本讲的资源列表中。
+
+此外，官方文档中包含了关于如何使用这个调试器的详细信息。文档中解释了一些需要编辑的选项和配置，大家不用担心，稍后我会逐一
+解释这些内容。你还会在文档中找到Visual Studio 中 CUDA 相关的特定选项说明。
+
+\subsection{变量窗口与汇编级调试}
+让我们重点关注调试界面中的 \textbf{变量窗口 (Variables Window)}。
+\begin{itemize}
+    \item \textbf{检查变量}：你可以检查自定义变量，也可以检查预定义变量（如线程 ID 和块 ID）。
+    \item \textbf{检查内存}：你可以观察特定变量（例如变量 A）在内存中的状态和数值变化。
+    \item \textbf{代码映射}：你可以看到 CUDA 代码中的每一行是如何转换成对应的汇编代码的。例如，如果你的应用程序中有一个变量 A，你可以实时检查它在当前执行点的值。
+\end{itemize}
+稍后我会通过一个具体的例子来展示这一过程。
+
+\subsection{实战演示：向量加法调试}
+现在让我们回到应用程序。这里有一个非常简单的 \textbf{向量加法 (Vector Addition)}应用程序作为
+示例。虽然这个例子很简单，但调试方法同样适用于后续更复杂的程序（如向量归约）。
+
+\subsection{验证程序正确性}
+首先，我们需要运行应用程序以确保它正常工作。
+\begin{itemize}
+    \item 观察输出结果：我们可以看到 $0 + 2 = 2$，$1 + 3 = 4$，$2 + 4 = 6$，以此类推。
+    \item 确认应用程序运行良好，没有任何问题。
+\end{itemize}
+
+\subsection{设置断点与启动调试}
+确认程序无误后，我们开始进行调试操作：
+\begin{enumerate}
+    \item \textbf{添加断点}：在代码行号左侧点击，或者通过菜单栏选择 \textbf{新建断点 (New Breakpoint)} 来添加断点。
+    \item \textbf{启动调试}：点击工具栏上的调试按钮，或者通过菜单栏选择 \textbf{Nsight} $\rightarrow$ \textbf{Start CUDA Debugging (Next-Gen)} 来启动调试会话。
+\end{enumerate}
+
+一旦启动，程序将在断点处暂停，你就可以开始检查上述提到的各种状态了。
+
+
+
+\subsection{掌握CUDA GPU并行编程（硬件与软件）\\P38: Nsight Compute}
+
+\section*{摘要}
+本节课程详细演示了如何使用 NVIDIA Nsight Compute 的调试功能对 CUDA向量加法程序进行逐步分析。
+内容涵盖 GPU 调试窗口的使用、启动配置（LaunchConfiguration）参数的解读、单步执行（Step Over）观察变量变化，以及通过内存视图（MemoryWindow）验证数组 A、B、C的十六进制存储布局。课程重点解释了整
+
+数类型在内存中的字节占用规则，并阐明了调试暂停状态下部分计算结果为零的根本原因。
+
+\subsection{Nsight Compute 调试界面概述}
+在 Nsight Compute 中，我们需要区分 CPU 端与 GPU端的调试视图。虽然软件提供了通用的调试菜单，但针
+对 CUDA 开发，应专注于 GPU 专用窗口。
+
+\subsection{线程视图与任务选择}
+进入调试模式后，界面会显示多个窗口。请注意：
+\begin{itemize}
+    \item \textbf{GPU 线程视图：} 专门用于显示 GPU 端的线程执行状态，这是我们关注的核心。
+    \item \textbf{CPU 线程视图：} 显示主机端线程，通常不在 GPU 内核调试范围内。
+\end{itemize}
+在视图选项中，可以选择“Tasks”或“Threads”。对于内核级调试，我们主要使用线程视图来追踪应用程序中的主要执行
+流。若当前无活动任务，需确保内核已正确触发断点。
+
+\subsection{启动详情与执行控制}
+
+\subsection{启动配置参数解读}
+在调试窗口的“Launch Details”面板中，可以查看当前内核的启动参数：
+\begin{itemize}
+    \item \textbf{Grid ID / Block IDX：} 当前执行的网格索引与块索引（均从0开始）。
+    \item \textbf{Thread IDX：} 当前线程在块内的索引（从0开始）。
+    \item \textbf{Grid Dimensions：} 网格维度，即每个网格包含的块数量。
+    \item \textbf{Block Dimensions：} 块维度，即每个块包含的线程数。例如，本例中每块96个线程，等价于3个线程束（Warp，$3 \times 32 = 96$）。
+\end{itemize}
+
+\subsection{单步执行与变量观察}
+使用“Step Over”按钮可逐行执行内核代码。在执行过程中：
+\begin{enumerate}
+    \item 高亮行随执行进度移动，指示当前指令位置。
+    \item 局部变量窗口实时更新。例如，当执行到 $C[i] = A[i] + B[i]$ 时，可观察到索引 $i$ 的值以及 A、B、C 对应元素的数值。
+    \item 若变量值未立即更新，可能需要额外执行一步以完成赋值操作。
+\end{enumerate}
+
+\textbf{注意：} 在调试初期，可能会观察到变量值似乎“卡”在初始状态（如始终显示0和2）。这通常是因为调试器仅聚
+焦于当前活动的线程束，而其他线程的计算结果尚未在当前视图中刷新。此时应结合内存视图进行验证。
+
+\subsection{内存视图深度解析}
+
+\subsection{访问内存窗口}
+通过菜单栏 \texttt{Debug > Windows > Memory}打开内存视图。该窗口以十六进制格式展示设备
+内存内容，每行包含多个地址及其对应的值。
+
+\subsection{定位变量与地址计算}
+要查看特定数组的内存布局：
+\begin{enumerate}
+    \item 在内存窗口的搜索框中输入变量名（如 \texttt{A}、\texttt{B} 或 \texttt{C}）并回车，视图将自动跳转至该数组的起始地址。
+    \item 观察地址增量：若首地址为 \texttt{0x...00}，下一行为 \texttt{0x...30}（十六进制），则差值为 \texttt{0x30}（十进制48），表明每行显示48字节的数据。
+\end{enumerate}
+
+\subsection{整数类型的内存布局}
+数组 A、B、C 均为 \texttt{int} 类型，理解其存储方式至关重要：
+\begin{itemize}
+    \item \textbf{字节占用：} 每个 \texttt{int} 占4字节（32位）。
+    \item \textbf{十六进制表示：} 每个十六进制数字占4位，两个十六进制数字构成1字节。因此，一个整数由8个十六进制数字表示。
+    \item \textbf{小端序存储：} 在小端架构下，低位字节存储在低地址。例如，整数值 \texttt{2} 在内存中显示为 \texttt{02 00 00 00}；当数值增大至超过255（\texttt{0xFF}）时，高位字节才会被填充。
+\end{itemize}
+
+\subsection{数据验证示例}
+根据初始化代码 $A[i]=i$ 和 $B[i]=i+2$：
+\begin{itemize}
+    \item \textbf{数组 A：} 起始值为 \texttt{00 00 00 00}（0），随后为 \texttt{01 00 00 00}（1）、\texttt{02 00 00 00}（2），依此类推。
+    \item \textbf{数组 B：} 起始值为 \texttt{02 00 00 00}（2），随后为 \texttt{03 00 00 00}（3）、\texttt{04 00 00 00}（4）。
+    \item \textbf{数组 C：} 预期结果为 $A[i]+B[i]$。前几个元素应为 \texttt{02 00 00 00}（2）、\texttt{04 00 00 00}（4）、\texttt{06 00 00 00}（6）。
+\end{itemize}
+
+\subsection{调试暂停与部分计算结果}
+在调试过程中，可能会发现数组 C 仅有前几个元素有正确值，其余均为零。\textbf{这是正常现象}，原因如下：
+\begin{itemize}
+    \item 调试器在断点处暂停时，仅完成了部分线程束的执行。
+    \item 未执行的线程尚未写入结果，其对应的内存区域仍保持初始值（零）。
+    \item 继续执行“Step Over”或运行下一个线程束后，新的计算结果（红色高亮显示）将逐步填充到内存中。
+\end{itemize}
+通过检查特定地址（如\texttt{0x...420}），可以验证后续线程的计算结果是否正确写入。这种逐步填充的过程直观
+地展示了 GPU并行计算的执行时序。
+
+\section*{结语}
+本节掌握了 Nsight Compute内存视图的核心用法，建立了代码变量与物理内存地址之间的映射关系。理解十六进制布局
+与调试暂停机制，是进行底层 CUDA性能分析与错误排查的基础。下一节我们将进一步探讨汇编代码视图，从指令级别分析内核行为
+。
+
+
+\subsection{掌握CUDA GPU并行编程（硬件与软件）SASS汇编分析与Visual Studio集成Nsight工具}
+
+
+\section*{摘要}
+本节课程涵盖两大核心主题：一是通过反汇编窗口解读CUDA内核的SASS指令级行为，理解高级代码与底层汇编的映射关系；二是
+详解如何在VisualStudio中无缝集成NVIDIA Nsight Compute与NsightSystems工具。
+课程演示了从IDE直接启动性能分析、配置输出路径、解读关键指标（如SM利用率、缓存命中率、GPC频率及占用率时间线）的完
+整流程，并强调了交互式分析与文件分析的区别，为后续向量规约优化奠定基础。
+
+\subsection{SASS汇编代码分析}
+
+\subsection{访问反汇编视图}
+在Nsight Compute调试界面中，通过 \texttt{Windows > Disassembly}打开反汇编窗
+口。需注意区分CPU端与GPU端汇编：
+\begin{itemize}
+    \item CPU端汇编通常以标准x86/ARM指令呈现，非本课程重点。
+    \item GPU端汇编（SASS）以双下划线前缀标识（如 \texttt{\_\_global\_\_}），是分析CUDA内核性能的关键。
+\end{itemize}
+
+\subsection{高级代码与SASS指令映射}
+CUDA C++代码与SASS指令并非一一对应，编译器会进行多种优化：
+\begin{enumerate}
+    \item \textbf{参数加载：} 内核启动初期，多条 \texttt{MOV} 指令用于将内核参数（指针A、B、C及标量N）从常量内存或寄存器加载到工作寄存器。
+    \item \textbf{线程索引计算：} 对应代码中的 \texttt{int i = blockIdx.x * blockDim.x + threadIdx.x}，SASS中体现为读取 \texttt{TID}（线程ID）、\texttt{CTAID}（块ID）及块维度，后接乘法与加法指令。
+    \item \textbf{边界检查：} \texttt{if (i < n)} 被转换为比较指令（如 \texttt{SET.LT}）与条件分支指令。若条件不满足，程序跳转至内核末尾标签（如 \texttt{DDD0}），跳过计算体。
+    \item \textbf{计算与存储：} 单行 $C[i] = A[i] + B[i]$ 可能展开为多条指令，包括全局内存加载（\texttt{LDG}）、浮点加法（\texttt{FADD}）及全局内存存储（\texttt{STG}）。编译器可能因循环展开或指令调度插入额外操作。
+\end{enumerate}
+
+\subsection{汇编分析的价值}
+查看SASS对性能调优至关重要：
+\begin{itemize}
+    \item \textbf{识别障碍：} 检测是否存在不必要的同步屏障（\texttt{BAR}）或内存依赖导致的流水线停顿。
+    \item \textbf{验证优化：} 确认编译器是否按预期进行了向量化、循环展开或寄存器分配。
+    \item \textbf{延迟归因：} 当高级代码无法解释性能瓶颈时，SASS可揭示指令级延迟来源。
+\end{itemize}
+
+\textbf{注意：} NVIDIA未公开SASS完整文档，分析需结合经验与社区资源。本例中未观察到明显障碍指令，表明
+内核流水线较为顺畅。
+
+\subsection{Visual Studio集成Nsight工具}
+
+\subsection{传统命令行方式的局限}
+此前性能分析需在Linux终端或WSL中手动执行：先运行CUDA程序使其暂停，再通过 \texttt
+{ncu--attach} 附加分析器，最后启动GUI加载结果。此流程繁琐且易出错。
+
+\subsection{VS扩展一键启动}
+Visual Studio通过Nsight扩展简化了全流程：
+\begin{enumerate}
+    \item 确保已安装CUDA Toolkit（自带Nsight工具）或通过官网单独安装。
+    \item 在VS中打开CUDA项目（如 \texttt{kernel.cu}）。
+    \item 菜单栏选择 \texttt{Extensions > Nsight}，可见 \textbf{Nsight Compute}、\textbf{Nsight Graphics}、\textbf{Nsight Systems} 三个选项。
+\end{enumerate}
+
+\subsection{Nsight Compute集成分析}
+\begin{enumerate}
+    \item 选择 \texttt{Nsight Compute > Profile}，VS自动填充可执行文件路径与工作目录。
+    \item 指定输出文件路径（如 \texttt{Section8/A.ncu-rep}），避免报告丢失。
+    \item 点击 \textbf{Launch} 启动分析。若程序含 \texttt{scanf} 等阻塞调用，需在控制台输入以继续执行。
+    \item 分析完成后，结果自动在VS内嵌窗口展示，包含：
+    \begin{itemize}
+        \item \textbf{Speed of Light / Roofline：} 理论性能上限与实际达成率。
+        \item \textbf{Compute Workload Analysis：} SM吞吐量、ALU/FP64/Tensor Core利用率。
+        \item \textbf{Memory Workload Analysis：} L1/L2缓存命中率、显存带宽利用率。
+        \item \textbf{Occupancy：} 每周期活跃线程束数。
+    \end{itemize}
+\end{enumerate}
+
+\textbf{关键提示：} 重点关注内核\textbf{持续时间（Duration）}，此为后续向量规约优化中对比不同
+实现性能的基准指标。
+
+\subsection{交互式分析 vs 文件分析}
+\begin{itemize}
+    \item \textbf{常规分析（Profile）：} 生成 \texttt{.ncu-rep} 文件，支持离线复查与团队共享。
+    \item \textbf{交互式分析（Interactive）：} 实时查看指标，不保存文件，适用于快速迭代调试。
+\end{itemize}
+
+\subsection{Nsight Systems时间线分析}
+
+\subsection{启动与配置}
+通过 \texttt{Extensions > Nsight Systems > Start}启动。可选择收集GPU指标
+、CUDA Trace、上下文切换、CPU采样等。本例聚焦GPU行为。
+
+\subsection{时间线核心解读}
+Nsight Systems提供毫秒级精度的系统级时间线，关键轨道包括：
+\begin{itemize}
+    \item \textbf{GPC Clock Frequency：} GPC（Graphics Processing Cluster）时钟频率随负载动态调整。空闲时降频节能，计算时升频至峰值。频率波动直接影响性能一致性。
+    \item \textbf{SM Thread Occupancy：} 反映SM活跃线程束比例。低占用率时段可能对应数据传输、内核启动开销或CPU瓶颈。
+    \item \textbf{Tensor Core Activity：} 本例向量加法未使用张量核心，故该轨道为零值。若启用混合精度计算，此处将显示活动强度。
+    \item \textbf{Memory Transfers：} Host$\leftrightarrow$Device数据拷贝与内核执行的时间重叠度，是异步优化效果的直观验证。
+\end{itemize}
+
+\subsection{交互操作}
+\begin{itemize}
+    \item \textbf{缩放：} 按住 \texttt{Ctrl} + 鼠标滚轮可局部放大时间线，观察微秒级事件。
+    \item \textbf{悬停信息：} 鼠标悬停任一区间，弹出详细元数据（如占用率百分比、指令类型分布）。
+    \item \textbf{瓶颈定位：} 通过时间线间隙识别CPU-GPU同步点、内存传输阻塞或内核启动延迟。
+\end{itemize}
+
+\section*{结语与后续安排}
+本节建立了从SASS指令级到系统时间线级的全栈分析能力。VisualStudio集成大幅降低了工具使用门槛，使性能分析融
+入日常开发流程。下一节将基于本节采集的基线数据，开展向量规约的多版本优化对比。后续课程将以VisualStudio为主要
+开发环境，VS Code仅作辅助。
+

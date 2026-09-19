@@ -1,0 +1,110 @@
+\section{CUDA GPU并行编程：向量归约优化}
+
+\subsection{引言：自动化多级归约}
+在上一讲中，我们手动编写了三级 Kernel 启动代码来处理不同规模的部分和。为了提升代码的通用性，我们首先将其重构
+为\textbf{While 循环}结构，使其能自动适应任意大小的输入向量。
+
+\begin{lstlisting}[caption={自动化多级归约 Host 端逻辑}]
+int n = N; // 初始元素数量
+int blockSize = 256;
+int gridSize = (n + blockSize - 1) / blockSize;
+
+// 当剩余元素多于一个Block的处理能力时，持续启动Kernelwhile (gridSize > 1) {
+    reduce_in_place<<<gridSize, blockSize>>>(d_input, n);
+    cudaDeviceSynchronize();
+    
+    // 更新问题规模：下一级处理的元素数等于上一级的Block数
+    n = gridSize; 
+    gridSize = (n + blockSize - 1) / blockSize;
+}
+
+// 最后一步：仅剩1个Block，产出最终结果
+reduce_in_place<<<1, blockSize>>>(d_input, n);
+cudaDeviceSynchronize();
+\end{lstlisting}
+
+\subsection{核心优化：移除取模过滤器}
+
+\subsection{原始代码的性能瓶颈}
+在基础版归约 Kernel 中，我们通过取模运算来筛选活跃线程：
+\begin{lstlisting}
+// 原始写法：仅允许满足步幅倍数的线程执行
+if ((tid % (2 * stride) == 0) && (tid + stride < blockDim.x)) {
+    input[tid] += input[tid + stride];
+}
+\end{lstlisting}
+
+为什么取模运算是性能杀手？
+
+根据 NVIDIA GPU 指令集架构（ISA）文档及实测数据：
+\begin{itemize}
+    \item \textbf{加法/乘法}：通常仅需 2--9 个时钟周期。
+    \item \textbf{整数除法/取模}：由于 GPU 缺乏专用硬件除法器，需通过软件模拟实现，耗时高达 \textbf{200--300+ 个时钟周期}。
+\end{itemize}
+在归约的内层循环中频繁执行取模操作，会导致严重的指令流水线停顿（Stall）。
+
+\subsection{优化的正确性证明}
+如果我们直接移除 \lstinline{if} 判断，所有线程都会执行加法：
+\begin{lstlisting}
+// 优化写法：移除取模过滤，仅保留边界检查
+if (tid + stride < blockDim.x) {
+    input[tid] += input[tid + stride];
+}
+\end{lstlisting}
+
+\textbf{为什么这不会破坏计算结果？}
+\begin{enumerate}
+    \item 以 $stride=1$ 为例：线程1 执行 $input[1] += input[2]$，将位置1的值修改为 $v_1+v_2$。
+    \item 但在下一步 $stride=2$ 时，只有线程0、2、4... 参与计算。线程0 读取的是 $input[0]$ 和 $input[2]$。
+    \item \textbf{关键点}：位置1 的值虽然在 $stride=1$ 时被“错误”修改了，但在后续所有步骤中\textbf{永远不会被再次读取}。
+    \item 因此，这些“冗余计算”虽然浪费了少量算力，但完全不影响最终归约结果的正确性。
+\end{enumerate}
+
+\subsection{性能剖析对比 (Nsight Compute)}
+
+使用 Nsight Compute 对优化前后进行对比分析（基准线 A vs 优化版 B）：
+
+\subsection{执行时间显著提升}
+\begin{itemize}
+    \item \textbf{基准线 A（含取模）}：主 Kernel 耗时 \textbf{283 $\mu s$}。
+    \item \textbf{优化版 B（无取模）}：主 Kernel 耗时 \textbf{176 $\mu s$}。
+    \item \textbf{性能提升}：执行时间减少约 \textbf{38\%}，L1/L2 缓存吞吐量提升超过 100\%。
+\end{itemize}
+
+\subsection{汇编级 (SASS) 证据}
+通过 NCU 的源代码关联视图观察编译后的机器指令：
+\begin{itemize}
+    \item \textbf{含取模版本}：\lstinline{if} 语句块被编译为 \textbf{50--60 条} SASS 指令，包含大量的 \lstinline{BRA}（分支）、\lstinline{MOV}、\lstinline{BAR.SYNC} 以及软件模拟除法的复杂序列。
+    \item \textbf{无取模版本}：相同的 \lstinline{if} 块仅被编译为 \textbf{约 6 条} SASS 指令，主要是简单的加载（\lstinline{LDG}）、加法（\lstinline{FADD}）和存储（\lstinline{STG}）。
+\end{itemize}
+
+关于分支发散的补充说明：移除取模不仅减少了指令数，还消除了 \textbf{Warp 内的分支发散（Branch Divergence）}。原始代码中，同一 Warp 内一半线程走 if-true 路径，另一半走 if-false 路径，导致串行化执行。优化后所有线程执行相同路径，Warp 效率达到 100\%。
+
+\subsection{调试验证 (Visual Studio / CUDA-GDB)}
+为确保优化的数学正确性，我们通过调试器观察内存状态：
+
+\subsection{带过滤器时的内存状态}
+在 $stride=1$ 完成后，观察前32个元素（一个Warp）：
+\begin{itemize}
+    \item $input[0], input[2], input[4]...$ ：值已更新为相邻两元素之和。
+    \item $input[1], input[3], input[5]...$ ：\textbf{保持原始值不变}。
+\end{itemize}
+
+\subsection{移除过滤器后的内存状态}
+在 $stride=1$ 完成后：
+\begin{itemize}
+    \item \textbf{所有} $input[0..31]$ 的值均被修改。
+    \item 例如 $input[1] = v_1 + v_2$（而非原始的 $v_1$）。
+\end{itemize}
+尽管内存模式不同，但由于后续步骤的访问模式（由 $stride$ 决定）天然跳过了这些被“污染”的位置，最终$input
+[0]$ 中的归约结果与基准版本\textbf{完全一致}（浮点精度误差范围内）。
+
+\subsection{总结与最佳实践}
+
+\begin{enumerate}
+    \item \textbf{避免在热路径中使用取模/除法}：在 GPU 内核的紧密循环中，应尽可能用位运算（如 \lstinline{&} 代替 \lstinline{\%}）或通过算法重构（如本节所示）来消除这些高延迟指令。
+    \item \textbf{冗余计算 vs 分支开销}：在 GPU 上，让所有线程执行统一的简单操作，往往比通过复杂条件判断让部分线程空闲更高效。“做无用功”有时比“停下来思考要不要做功”更快。
+    \item \textbf{验证手段}：性能优化必须伴随正确性验证。建议同时使用 Nsight Compute（看性能指标）和 CUDA-GDB/VS Debugger（看内存数值）进行双重确认。
+    \item \textbf{后续方向}：当前版本仍受限于全局内存带宽和非合并访问。下一讲将引入 \textbf{共享内存（Shared Memory）} 进一步优化访存模式。
+\end{enumerate}
+

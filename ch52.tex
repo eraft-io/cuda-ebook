@@ -1,0 +1,114 @@
+\section{CUDA GPU并行编程：使用cuBLAS库调用张量核心}
+\subsection{概述：cuBLAS 与 WMMA API 的区别}
+
+本节文章主要讨论 \textbf{cuBLAS} 库及其在张量核心（TensorCore）矩阵乘法编程中的应用。cuBLAS 是一个高度优化的线性代数库，其功能与前两节文章中介绍的 WMMA API类似，但二者存在本质区别：
+
+
+\begin{itemize}
+    \item \textbf{WMMA API}：需要开发者手动编写 GPU Kernel，自行管理数据从全局内存到寄存器的加载、MMA Sync 指令调用以及结果存储等底层细节，具有高度可定制性。
+    \item \textbf{cuBLAS}：是\textbf{不可定制}的封装库。开发者无需编写矩阵乘法的 GPU Kernel，只需配置规格参数并调用库函数即可。NVIDIA 已在库内部实现了针对张量核心的深度优化。
+\end{itemize}
+
+\subsection{环境配置与安装}
+
+在使用 cuBLAS 之前，需确保正确安装并链接库文件。
+
+\subsection{头文件引用}
+除了常规的 CUDA Runtime 头文件外，还需包含 cuBLAS v2 头文件以支持半精度与张量核心运算：
+\begin{lstlisting}
+#include <cublas_v2.h>
+\end{lstlisting}
+
+\subsection{库的安装}
+cuBLAS 通常随 CUDA Toolkit 一同发布。若需单独安装或更新，请前往 NVIDIA 官网下载对应CUDA
+版本的 cuBLAS 库。在 Linux 环境下，需根据系统架构和 CUDA 版本选择正确的安装包。
+
+\subsection{代码实现详解}
+
+\subsection{基本流程}
+与自定义 Kernel 不同，使用 cuBLAS 的主函数流程如下：
+\begin{enumerate}
+    \item 分配主机端与设备端内存（\texttt{cudaMalloc}）。
+    \item 初始化矩阵 A、B 并将数据传输至设备。
+    \item \textbf{创建 cuBLAS 句柄（Handle）}：这是 cuBLAS 的核心概念，类似于上下文管理器，所有库函数调用均需通过此句柄进行。
+    \begin{lstlisting}
+cublasHandle_t handle;
+cublasCreate(&handle);
+    \end{lstlisting}
+    \item 设置标量参数 $\alpha$ 和 $\beta$。
+    \item 调用矩阵乘法函数。
+    \item 销毁句柄并释放资源。
+\end{enumerate}
+
+\subsection{GEMM 公式}
+cuBLAS 执行的通用矩阵乘法（GEMM）公式为：
+\begin{equation}
+    C = \alpha \cdot A \times B + \beta \cdot C
+\end{equation}
+在本示例中，为执行纯粹的矩阵乘法 $C = A \times B$，我们将 $\alpha$ 设为 1，$\beta$设
+为 0。
+
+\subsection{函数调用解析：cublasGemmEx}
+为了利用张量核心并混合精度计算，我们使用 \texttt{cublasGemmEx} 而非传统的\texttt
+{cublasSgemm}。
+
+\begin{lstlisting}
+cublasGemmEx(handle, 
+             CUBLAS_OP_N, CUBLAS_OP_N, // A、B 均不转置
+             N, N, N,                   // M, N, K 维度
+             &alpha, 
+             d_A, CUDA_R_16F, N,        // A: FP16, leading dim
+             d_B, CUDA_R_16F, N,        // B: FP16, leading dim
+             &beta, 
+             d_C, CUDA_R_32F, N,        // C: FP32 (累加器)
+             CUDA_R_32F,                  // 计算类型: FP32
+             CUBLAS_GEMM_DEFAULT_TENSOR_OP); // 启用张量核心
+\end{lstlisting}
+
+\paragraph{关键参数说明：}
+\begin{itemize}
+    \item \textbf{转置选项}：\texttt{CUBLAS\_OP\_N} 表示不转置，\texttt{CUBLAS\_OP\_T} 表示转置。合理设置转置可改善内存访问模式（如将列主序转为行主序），减少 Cache Miss。
+    \item \textbf{数据类型}：示例中输入 A、B 为半精度（\texttt{CUDA\_R\_16F}），输出 C 为单精度（\texttt{CUDA\_R\_32F}）。这种混合精度模式是张量核心的典型用法。
+    \item \textbf{计算类型}：指定为 \texttt{CUDA\_R\_32F}，确保即使输入为 FP16，累加运算仍以 FP32 进行，保证数值稳定性。
+    \item \textbf{算法选择}：\texttt{CUBLAS\_GEMM\_DEFAULT\_TENSOR\_OP} 明确指示库优先使用张量核心算法。
+\end{itemize}
+
+\subsection{编译与性能对比}
+
+\subsection{Makefile 编译配置}
+建议使用 Makefile 简化编译流程。编译 cuBLAS 程序时，除常规优化标志外，\textbf
+{必须链接cublas 库}：
+
+\begin{lstlisting}
+# 通用编译标志
+COMMON_FLAGS = -arch=sm_80 -O3
+
+# cuBLAS 目标编译规则
+cublas: cublas.cu
+    nvcc $(COMMON_FLAGS) -o cublas cublas.cu -lcublas
+\end{lstlisting}
+
+\begin{quote}
+\textbf{注意}：架构标志 \texttt{-arch=sm\_80} 需根据实际 GPU 型号调整
+；\texttt{-O3} 用于开启最高级别编译器优化；\texttt{-lcublas} 是链接 cuBLAS 库的关
+键， 缺失会导致链接错误。
+\end{quote}
+
+\subsection{性能测试结果}
+在矩阵尺寸 $N=1024$ 的测试中：
+\begin{itemize}
+    \item \textbf{WMMA API 手写Kernel}：约 388 $\mu s$
+    \item \textbf{cuBLAS (Tensor Core)}：约 107 $\mu s$
+\end{itemize}
+
+\textbf{结论}：cuBLAS 提供了远超手写 WMMA Kernel 的性能。这得益于 NVIDIA 对库内核函
+数的极致优化（包括寄存器分块、流水线调度等）。对于生产环境中的矩阵乘法需求，强烈建议优先使用 cuBLAS 而非自行实现
+。
+
+\subsection{学习建议}
+本文章仅作为入门引导。cuBLAS 提供了丰富的 API 变体（如 \texttt{cublasSgemm}
+,\texttt{cublasDgemm}, \texttt{cublasHgemm} 等），建议课后深入查阅
+\href{https://docs.nvidia.com/cuda/cublas/}{NVIDIA cuBLAS
+官方文档
+}，以掌握不同精度、布局及批处理操作的详细用法。同时，建议学习 Makefile 的基本语法，以提升 CUDA项目的构建效率。
+ 

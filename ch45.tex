@@ -1,0 +1,97 @@
+\section{CUDA GPU并行编程：矩阵乘法基础实现}
+
+\subsection{引言：矩阵乘法的重要性}
+
+矩阵乘法（GEMM, General MatrixMultiply）是计算科学与工程领域的基石操作。无论是在大规模仿真、
+优化问题，还是在当今热门的机器学习与人工智能领域，矩阵乘法都扮演着核心角色。
+
+\begin{itemize}
+    \item \textbf{深度学习与AI}：神经网络的层运算本质上可表示为矩阵运算。加速矩阵乘法可直接提升训练与推理速度。
+    \item \textbf{科学仿真}：流体力学、量子力学等领域的数值模拟严重依赖矩阵运算。
+    \item \textbf{图像与信号处理}：图像滤波、变换及信号分析均可分解为矩阵-向量或矩阵-矩阵乘法。例如，应用滤波器即为将图像矩阵与滤波器矩阵相乘。
+\end{itemize}
+
+\subsection{软件生态：专用库与硬件单元}
+
+由于矩阵乘法的普适性，主流硬件厂商均提供了高度优化的软件库和专用硬件单元。
+
+\subsection{软件库}
+\begin{itemize}
+    \item \textbf{NVIDIA cuBLAS}：CUDA基础线性代数子程序库，提供标准且高度优化的GEMM内核。
+    \item \textbf{NVIDIA cuTlass}：相比cuBLAS更具灵活性，允许用户自定义和优化GEMM内核模板。
+    \item \textbf{AMD Tensile}：基于配置的库，通过修改配置选项自动生成针对特定GEMM操作优化的可执行文件，无需手动编写底层内核。
+\end{itemize}
+
+\subsection{专用硬件单元}
+现代GPU引入了专门用于加速矩阵运算的硬件单元，其吞吐量远超通用计算核心：
+\begin{itemize}
+    \item \textbf{NVIDIA Tensor Cores}：专为混合精度矩阵乘法设计。例如在A100上，Tensor Core的FP16吞吐量可达300+ TFLOPS，而普通CUDA Core仅约20 TFLOPS。一条Tensor Core指令可在数个周期内完成一个小矩阵块（如$4\times4$或$16\times16$）的乘加运算。
+    \item \textbf{AMD Matrix Cores}：功能类似于Tensor Core，专用于加速矩阵运算。
+\end{itemize}
+
+\subsection{算法原理：从CPU到GPU}
+
+\subsection{数学定义}
+标准矩阵乘法定义为 $C = A \times B$，维度遵循 $M \times K$ 与 $K \times N$规
+则：\[C_{i,j} = \sum_{k=0}^{K-1} A_{i,k} \cdot B_{k,j}\]其中 $A$
+为 $M \times K$，$B$ 为 $K \times N$，结果 $C$ 为 $M \times N$。
+
+\subsection{CPU串行实现}
+CPU端通常需要三重嵌套循环遍历行($i$)、列($j$)和累加维度($k$)。为提高效率，应使用局部变
+量\texttt{sum} 进行累加，避免频繁访问全局内存。
+
+\subsection{GPU朴素实现（Naive GEMM）}
+GPU并行化的核心思想是用线程索引替代外层循环：
+\begin{itemize}
+    \item \textbf{线程映射}：每个线程负责计算输出矩阵 $C$ 中的一个元素 $C_{i,j}$。
+    \item \textbf{索引计算}：利用二维网格和二维线程块，通过 \texttt{blockIdx} 和 \texttt{threadIdx} 计算全局行号 $row$ 和列号 $col$。
+    \item \textbf{内层循环}：$k$ 维度的累加仍需在线程内部通过循环完成。
+\end{itemize}
+
+\noindent \textbf{注意}：此版本称为“朴素”实现，仅使用全局内存，未利用共享内存或分块（Tiling）技术，存在大量冗余内存访问，性能远未达到硬件上限。
+
+\subsection{CUDA代码实现步骤}
+
+编写CUDA矩阵乘法程序需遵循以下七个标准步骤：
+
+\begin{enumerate}
+    \item \textbf{分配内存}：在主机（Host）和设备（Device）分别分配矩阵 $A, B, C$ 的存储空间。
+    \item \textbf{初始化数据}：在主机端初始化矩阵 $A, B$（随机值）及 $C$（零值）。
+    \item \textbf{数据传输 H2D}：使用 \texttt{cudaMemcpy} 将 $A, B$ 从主机复制到设备。
+    \item \textbf{定义内核}：编写 \texttt{\_\_global\_\_} 函数实现朴素矩阵乘法。
+    \item \textbf{启动内核}：配置二维网格与线程块尺寸，传入设备指针及矩阵维度。
+    \item \textbf{数据传输 D2H}：将计算结果 $C$ 从设备复制回主机。
+    \item \textbf{释放内存}：使用 \texttt{delete[]} 和 \texttt{cudaFree} 释放主机与设备内存。
+\end{enumerate}
+
+\subsection{关键代码片段}
+
+\begin{lstlisting}[caption={朴素矩阵乘法CUDA内核}]
+__global__ void matmul_naive(float* A, float* B, float* C, int N) {
+    // 计算当前线程负责的行和列
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (row < N && col < N) {
+        float sum = 0.0f;
+        // k维度累加
+        for (int k = 0; k < N; ++k) {
+            sum += A[row * N + k] * B[k * N + col];
+        }
+        C[row * N + col] = sum;
+    }
+\end{lstlisting}
+
+\subsection{验证与性能分析}
+\begin{itemize}
+    \item \textbf{正确性验证}：必须保留一份CPU计算结果作为基准。比较时计算 $\sum |C_{GPU} - C_{CPU}|$，若使用浮点数，允许极小误差；若为整数则应严格为0。
+    \item \textbf{性能考量}：GPU存在数据拷贝开销，仅在矩阵规模较大（如 $N \geq 1024$）时才能体现加速优势。例如 $N=1024$ 时，CPU可能耗时7000ms，而GPU仅需28ms。
+    \item \textbf{Roofline分析}：使用Nsight Compute进行分析。朴素实现通常受限于内存带宽（Memory Bound）。后续优化（如Shared Memory Tiling）旨在减少全局内存访问，使性能向计算受限（Compute Bound）区域移动。
+\end{itemize}
+
+\subsection{总结与展望}
+
+本节实现了矩阵乘法的朴素CUDA版本，建立了性能基准。尽管该实现逻辑简单，但效率较低。下一节将介绍\textbf
+{分块（Tiling）技术}与\textbf{共享内存（SharedMemory）}的使用，这是优化GEMM 性能的核心
+手段，也是所有高性能矩阵乘法库的基础。
+

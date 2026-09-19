@@ -1,0 +1,82 @@
+\section{CUDA GPU并行编程：WMMA API实战案例}
+
+
+\subsection{概述}
+本章节详细讲解如何使用 \textbf
+{WMMA (Warp Matrix Multiply-Accumulate)API} 对 NVIDIA G PU 的张
+量核心（Tensor Cores）进行编程。我们将通过一个 $1024\times 1024$ 方阵乘法的实际案例，演
+示从核函数编写、编译配置到性能对比的完整流程。
+
+\subsection{核函数实现细节}
+
+\subsection{基本参数与Warp划分}
+在本案例中，矩阵 $A$、$B$、$C$ 的尺寸均为 $N=1024$，分块尺寸（Tile Size）设为16。核函数定
+义为 \texttt{matrixMultiplyFP32}，输出为单精度浮点数（FP32），输入为半精度浮点数（FP1
+6）。
+
+Warp ID 的获取与大矩阵的分块映射逻辑如下：
+\begin{itemize}
+    \item 将矩阵维度 $N$ 除以 Tile Size 得到每个维度的分块数。
+    \item 确保参与计算的 Warp 总数等于 Tile 总数。若不相等，需提前返回以避免越界访问或段错误（Segmentation Fault）。
+    \item Fragment 初始化：将累加器 Fragment $C$ 填充为零。
+\end{itemize}
+
+\subsection{数据加载与计算流程}
+\begin{enumerate}
+    \item \textbf{初始化}：使用 \texttt{randomMatrix} 函数生成随机矩阵 $A$ 和 $B$。
+    \item \textbf{内存分配}：在主机端（Host）和设备端（Device）分别分配指针 \texttt{hA, hB, hC} 与 \texttt{dA, dB, dC}。
+    \item \textbf{数据传输}：使用 \texttt{cudaMemcpy} 将数据从主机拷贝至设备；使用 \texttt{cudaMemset} 将设备端矩阵 $C$ 初始化为零。
+    \item \textbf{执行计算}：加载 Fragment $A$ 和 $B$，调用 WMMA API 执行矩阵乘法，并将结果存储回全局内存中的矩阵 $C$。
+\end{enumerate}
+
+\subsection{主机端验证与同步}
+\begin{itemize}
+    \item \textbf{尺寸校验}：必须确保 $N$ 是 Tile Size 的整数倍（例如 Tile=16 时，$N$ 不能为 15）。
+    \item \textbf{同步机制}：调用 \texttt{cudaDeviceSynchronize()} 确保 CPU 等待 GPU 核函数执行完毕后再进行后续操作。
+    \item \textbf{结果验证}：实现一个 CPU 版本的朴素矩阵乘法，对比 GPU 输出的前 10 个元素以验证正确性。
+\end{itemize}
+
+\subsection{编译配置的关键注意事项}
+
+\subsection{架构指定（至关重要）}
+WMMA API 专为张量核心设计，而张量核心首次引入于 \textbf{Volta} 架构。若未指定架构，NVCC默认
+使用较旧的计算能力（如 SM\_52），导致编译报错（提示 \texttt{nvcuda::wmma} 未定义）。
+
+\textbf{正确编译命令示例（以 RTX 3060 Ti / Ampere 架构为例）：}
+\begin{lstlisting}[language=bash]
+nvcc -o tensor2 tensor2.cu -arch=sm_80
+\end{lstlisting}
+
+\noindent \textbf{注意}：无论是否使用张量核心，都应始终显式指定目标架构（\texttt{-arch=sm\_XX}），以充分利用特定硬件的特性与优化。
+
+\subsection{性能分析与对比}
+
+\subsection{Profiling 工具使用}
+使用 \texttt{ncu} (Nsight Compute) 测量核函数执行时间：
+\begin{lstlisting}[language=bash]
+ncu --metrics sm__cycles_elapsed.avg ./tensor2
+\end{lstlisting}
+
+\subsection{性能对比结果}
+针对 $1024 \times 1024$ 矩阵乘法，实测数据如下：
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{|l|c|c|}
+\hline
+\textbf{实现版本} & \textbf{执行时间} & \textbf{相对加速比} \\
+\hline
+朴素版本（Naive） & 2.5 ms (2500 $\mu$s) & 1.0x \\
+\hline
+WMMA API（张量核心） & 388 $\mu$s & $\approx$ 6.5x \\
+\hline
+\end{tabular}
+\caption{WMMA API 与朴素矩阵乘法性能对比}
+\end{table}
+
+\noindent \textbf{结论}：仅通过使用 WMMA API 调用张量核心，相较于无优化的朴素版本，性能提升约 \textbf{6.5倍}（节省约 85\% 的执行时间）。建议进一步将 WMMA 版本与共享内存优化版本进行对比，以全面评估不同优化策略的收益。
+
+\subsection{总结与展望}
+本节完整展示了 WMMA API 的基本用法及编译要求。张量核心编程不仅适用于矩阵乘法，还可扩展至cuBLAS、cuDNN 等库的底层加速。掌握架构感知的编译习惯与性能度量方法，是进行高效 GPU 并行编程的基础。
+
+

@@ -121,7 +121,6 @@ cuda_ebook/
 ├── ch1.tex ~ ch52.tex # 各章节内容
 ├── resources/         # 插图资源（79 张 PNG 图片）
 ├── Makefile           # 构建脚本
-└── wrap_text.py       # 文本格式化脚本
 ```
 
 ## 适合读者

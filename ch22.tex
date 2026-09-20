@@ -1,7 +1,7 @@
 \section{CUDA运行时API详解与设备属性查询}
 
 大家好，在今天的文章中我将解释CUDA运行时API（RuntimeAPI）。CUDA运行时API为CUDA提供了一个高级
-接口，它使开发者能够高效地利用NVIDIAGPU的能力来完成广泛的计算任务。这些API简化了管理GPU设备、内存分配以及
+接口，它使开发者能够高效地利用NVIDIA GPU的能力来完成广泛的计算任务。这些API简化了管理GPU设备、内存分配以及
 执行并行内核的过程。
 
 运行时API可供程序员用来开发优化或运行GPU加速的应用程序。这种方法是一个省时的替代方案，无需阅读GPU白皮书中详细的
@@ -21,19 +21,17 @@
 \end{figure}
 
 
-API函数最常见的例子之一是 \texttt{cudaGetDeviceProperties}函数。该函数旨在查询支持CUDA的GPU（或一般来说NVIDIAGPU）的属性和能力。这个函数为开发者提供了重要的信息，例如GPU名称、总全局内存
-
-、每个块的最大线程数、计算能力以及其他指标。这些丰富的信息和指标使开发者能够优化他们的CUDA应用程序。
-
+API函数最常见的例子之一是 \texttt{cudaGetDeviceProperties}函数。该函数旨在查询支持CUDA的GPU（或一般来说NVIDIA 
+GPU）的属性和能力。这个函数为开发者提供了重要的信息，例如GPU名称、总全局内存、每个块的最大线程数、
+计算能力以及其他指标。这些丰富的信息和指标使开发者能够优化他们的CUDA应用程序。
 现在让我们将这个函数应用到我们的GPU上来查询它的属性。
 
 \subsection{项目创建与代码实现}
 
 为了开始我们今天的项目，我们需要进入创建CUDA文件的CUDA课程文件夹，然后从这里创建一个新文件。如我们所见，我选择
-了 \texttt{section\_4\_01\_runtime\_api}，但在这里我要删
-除 \texttt{.txt} 并写上 \texttt{.cu}，因为我们需要一个 \texttt{.cu}文件，而不是
-文本文件。然后你需要做的就是来到这里并打开这个文件，使用任何编辑器（例如Visual StudioCode），然后点
-击 \texttt{Ctrl+S} 来保存我们的文件。
+了 \texttt{section\_4\_01\_runtime\_api}，但在这里我要删除 \texttt{.txt} 并写上 \texttt{.cu}，
+因为我们需要一个 \texttt{.cu}文件，而不是文本文件。然后你需要做的就是来到这里并打开这个文件，
+使用任何编辑器（例如Visual StudioCode），然后点击 \texttt{Ctrl+S} 来保存我们的文件。
 
 我要打开它，复制代码并粘贴到这个文件中。这里我想提醒你，这段代码的主要目的是查询GPU的一些属性，我们不需要进行任何计算
 。这就是为什么我们在主函数之前没有任何GPU内核，就像我们在所有先前项目中习惯做的那样。
@@ -94,8 +92,8 @@ int main() {
     \label{fig:placeholder}
 \end{figure}
 
-
 让我们从这里开始：
+
 \begin{enumerate}
     \item 我们包含 \texttt{stdio.h} 库，以便能够使用 \texttt{printf}。
     \item 声明 \texttt{main} 函数，并为整型变量在内存中分配空间。
@@ -109,6 +107,7 @@ int main() {
 \subsection{编译与运行验证}
 
 使用NVCC编译器编译代码：
+
 \begin{verbatim}
 nvcc -o runtime_api section_4_01_runtime_api.cu
 \end{verbatim}
@@ -135,8 +134,7 @@ nvcc -o runtime_api section_4_01_runtime_api.cu
 
 \textbf{思考题：} 已知每个Warp由32个线程组成，根据每块最大线程数1024，每个块的最大Warp数量是多少
 ？\[\text{Max Warps per Block} = \frac{1024}{32} = 32\]请注意区分“
-块”（软件概念）和“SM”（硬件概念）。块在SM上执行，我们需要这个值来计算另一个性能指标——占用率（Occupancy
-）。
+块”（软件概念）和“SM”（硬件概念）。块在SM上执行，我们需要这个值来计算另一个性能指标——占用率（Occupancy）。
 
 \subsection{关键要点总结}
 

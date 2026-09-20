@@ -3,8 +3,8 @@
 大家好，在今天的文章中，我们将深入探讨 NVIDIA GPU 的硬件与软件层级结构，并介绍 CUDA。让我们从 CUDA
 的介绍开始。CUDA 全称为 Compute Unified DeviceArchitecture（统一计算设备架构），
 是由 NVIDIA开发的一个并行计算平台和应用程序编程接口（API）。CUDA 允许软件开发者使用 NVIDIA的图形处
-理单元进行通用目的计算，这种方法被称为 GPGPU（General-Purpose computing onGraphics Processing Units，即图形处理单元上的通用计算）。
-
+理单元进行通用目的计算，这种方法被称为 GPGPU（General-Purpose computing onGraphics Processing Units，
+即图形处理单元上的通用计算）。
 
 在本节开头，我想强调三个关键点。第一，CUDA 基于 C 编程语言，这是一个优势，因为它让熟悉 C语言的开发者能够轻松编
 写可在 NVIDIA GPU 上执行的软件。第二个关键点是 CUDA 编译器。该编译器名为\texttt{nvcc}，它
@@ -15,7 +15,6 @@
 我们需要讨论的第三点是主机（Host）与设备（Device）这两个术语的区别。这是为了确保我们能充分利用 GPU的资源。
 通常，主机指的是 CPU 及其关联的全局内存（即 RAM），而设备则指 GPU及其全局内存。这种区分不仅在术语上非常重要
 ，在我们编写软件的方式上也至关重要，它影响代码结构、数据传输和内存管理。本图中左侧部分代表主机，右侧部分代表设备（即GPU）。
-
 
 \begin{figure}
     \centering
@@ -84,7 +83,7 @@ Volta 白皮书的图中所见，SM 被划分为四个分区。如果你查阅 A
 要回答这个问题，我们需要了解另一个单元，称为 GigaThread Engine。GigaThread Engine 是
 GPU 内部最重要的单元之一，它的关键功能之一就是高效地将这些软件块（任务/作业）分配到各个 SM上。为了进一步澄清这一
 概念，我更倾向于打开 Volta白皮书。持续查阅白皮书非常重要，因为它能提供更多信息。如果我们参考 Volta 白皮书来
-查看 GigaThreadEngine 的位置，如这张图所示，GigaThread Engine 位于整个 GPU的整体
+查看 GigaThread Engine 的位置，如这张图所示，GigaThread Engine 位于整个 GPU的整体
 结构之中。它连接到所有流式多处理器（SM）。请记住，它负责为这些 SM 提供必要的软件块或软件任务。
 
 将同样的原理应用到下一层级。假设有一个块需要在某个流式多处理器上执行。假设图中或本应用程序中的第一个块被分配到这个 SM
@@ -109,7 +108,7 @@ Warp。
 
 但让我们考虑另一个例子。如果我们增加 Warp 的数量，比如每个块有 32 个Warp，而我们有四个分区，那么每个分区将
 执行八个 Warp。如果你为每个硬件单元分配了更多任务（比如一个分区有八个Warp），那么你就需要一个管理者，你需要在这
-里设置一个小的管理者。这就是为什么我们有一个称为 WarpScheduler（Warp 调度器）的单元，在每个分区中都有
+里设置一个小的管理者。这就是为什么我们有一个称为 Warp Scheduler（Warp 调度器）的单元，在每个分区中都有
 一个 Warp 调度器。因为有时我们会为一个分区分配多个Warp，所以我们需要一个这里的组织者或管理者。
 
 如果我放大这张图，就能看到该分区内的 Warp调度器单元。正如我们所说，该单元存在于每个分区中，负责在每个时钟周期中调度

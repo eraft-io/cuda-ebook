@@ -30,8 +30,7 @@ nvcc -o tensor tensor.cu
 退至较旧的计算能力（如 Compute Capability 5.x），而该架构不支持张量核心相关指令。
 
 \subsection{解决方案：指定计算能力}
-必须显式添加 \texttt{-arch} 参数以匹配目标GPU架构。例如，针对 Ampere 架构（RTX30系列/A
-100等），应使用 \texttt{sm\_80}：
+必须显式添加 \texttt{-arch} 参数以匹配目标GPU架构。例如，针对 Ampere 架构（RTX30系列/A100等），应使用 \texttt{sm\_80}：
 \begin{lstlisting}
 nvcc -o tensor tensor.cu -arch=sm_80
 \end{lstlisting}
@@ -66,7 +65,5 @@ nvcc -o tensor tensor.cu -arch=sm_80
 ，但仅此而已。若在张量核心版本基础上进一步实施软件层面优化，性能仍有巨大提升空间。
 
 \subsection{后续内容预告}
-下一讲将系统介绍张量核心的编程工具链。不同于多数教程仅关注 cuBLAS/cuDNN 等高层库，本课程将深入讲解底层WMMA (Warp Matrix Multiply-Accumulate)API，这是实现精细化张量核心控制的关键技术，也
-
-是本课程的独家重点内容。
+下一讲将系统介绍张量核心的编程工具链。不同于多数教程仅关注 cuBLAS/cuDNN 等高层库，本课程将深入讲解底层WMMA (Warp Matrix Multiply-Accumulate)API，这是实现精细化张量核心控制的关键技术，也是本课程的独家重点内容。
 

@@ -45,8 +45,7 @@ cuBLAS 执行的通用矩阵乘法（GEMM）公式为：
 \begin{equation}
     C = \alpha \cdot A \times B + \beta \cdot C
 \end{equation}
-在本示例中，为执行纯粹的矩阵乘法 $C = A \times B$，我们将 $\alpha$ 设为 1，$\beta$设
-为 0。
+在本示例中，为执行纯粹的矩阵乘法 $C = A \times B$，我们将 $\alpha$ 设为 1，$\beta$设为 0。
 
 \subsection{函数调用解析：cublasGemmEx}
 为了利用张量核心并混合精度计算，我们使用 \texttt{cublasGemmEx} 而非传统的\texttt
@@ -89,9 +88,7 @@ cublas: cublas.cu
 \end{lstlisting}
 
 \begin{quote}
-\textbf{注意}：架构标志 \texttt{-arch=sm\_80} 需根据实际 GPU 型号调整
-；\texttt{-O3} 用于开启最高级别编译器优化；\texttt{-lcublas} 是链接 cuBLAS 库的关
-键， 缺失会导致链接错误。
+\textbf{注意}：架构标志 \texttt{-arch=sm\_80} 需根据实际 GPU 型号调整；\texttt{-O3} 用于开启最高级别编译器优化；\texttt{-lcublas} 是链接 cuBLAS 库的关键， 缺失会导致链接错误。
 \end{quote}
 
 \subsection{性能测试结果}
@@ -108,7 +105,5 @@ cublas: cublas.cu
 \subsection{学习建议}
 本文章仅作为入门引导。cuBLAS 提供了丰富的 API 变体（如 \texttt{cublasSgemm}
 ,\texttt{cublasDgemm}, \texttt{cublasHgemm} 等），建议课后深入查阅
-\href{https://docs.nvidia.com/cuda/cublas/}{NVIDIA cuBLAS
-官方文档
-}，以掌握不同精度、布局及批处理操作的详细用法。同时，建议学习 Makefile 的基本语法，以提升 CUDA项目的构建效率。
+\href{https://docs.nvidia.com/cuda/cublas/}{NVIDIA cuBLAS 官方文档}，以掌握不同精度、布局及批处理操作的详细用法。同时，建议学习 Makefile 的基本语法，以提升 CUDA项目的构建效率。
  

@@ -47,8 +47,8 @@ Shuffle操作等优化手段，正是因为通过屋顶线分析确认了该应�
     \text{Performance} = \min \left( \text{Peak Compute}
 ,\ \quad \text{AI} \times \text{Peak Bandwidth} \right)
 \end{equation}
-该公式构成了屋顶线图的数学基础：当 $\text{AI} \times \text{Bandwidth}
-< \text{Peak Compute}$ 时，性能随AI线性增长（内存墙）；反之则达到平台期（计算墙）。
+该公式构成了屋顶线图的数学基础：当 $\text{AI} \times \text{Bandwidth} < \text{Peak Compute}$ 时，
+性能随AI线性增长（内存墙）；反之则达到平台期（计算墙）。
 
 \subsection{屋顶线图解读与转折点}
 
@@ -90,11 +90,9 @@ Shuffle操作等优化手段，正是因为通过屋顶线分析确认了该应�
 nvcc -O3 -o reduce_01 reduce_01.cu
 ncu --launch-mode profile ./reduce_01
 \end{lstlisting}
-在Nsight Compute的``Roofline''面板中选择``FP32(Non-Tensor)''视图。对于RTX 3060等消费级卡，转折点AI约为30FLOP/Byte。基准版本的实测点位于转折点\textbf{左侧远处}（AI
-
-$\approx$0.12），确认为严重内存受限。
-\subsection{优化版本对比}
-对优化版本（03\_reduce\_shared\_unroll）进行相同分析：
+在Nsight Compute的``Roofline''面板中选择``FP32(Non-Tensor)''视图。对于RTX 3060等消费级卡，转折点AI约为30FLOP/Byte。基准版本的实测点位于转折点\textbf{左侧远处}
+（AI$\approx$0.12），确认为严重内存受限。
+\subsection{优化版本对比} 对优化版本（03\_reduce\_shared\_unroll）进行相同分析：
 \begin{itemize}
     \item \textbf{基准版}：AI = 0.12 FLOP/B, 性能 $\approx$ 15 GFLOPS
     \item \textbf{优化版}：AI = 0.66 FLOP/B, 性能 $\approx$ 177 GFLOPS
@@ -126,5 +124,4 @@ $\approx$0.12），确认为严重内存受限。
 \end{table}
 
 \textbf{核心原则}：优化的终极目标是使应用的数据点在屋顶线图中持续向右上方迁移，直至逼近硬件物理极限构成的``屋
-顶''。每次优化后都应重新运行Nsight Compute验证数据点位移，形成``测量$\to$分析$\to$优化
-$\to$验证''的闭环迭代。
+顶''。每次优化后都应重新运行Nsight Compute验证数据点位移，形成``测量$\to$分析$\to$优化$\to$验证''的闭环迭代。

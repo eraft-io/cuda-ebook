@@ -17,9 +17,8 @@
 
 \subsection{NVIDIA Nsight Visual Studio Edition 简介}
 我们将要使用的工具是 \textbf{NVIDIA Nsight Visual StudioEdition}。之所以称为
-“集成（Integrated）”，是因为它必须与 Visual Studio应用程序集成使用。这与 NVIDIA Nsight Compute、Nsight Systems 或 NsightGraphics 不同，后三者通常是独立运行的工具
-
-。
+“集成（Integrated）”，是因为它必须与 Visual Studio应用程序集成使用。
+这与 NVIDIA Nsight Compute、Nsight Systems 或 NsightGraphics 不同，后三者通常是独立运行的工具。
 
 \subsection{安装方法}
 关于如何安装该工具，你可以查看官方安装文档或使用手册。安装主要有两种方式：
@@ -46,15 +45,11 @@
 
 \subsection{集成工具入口}
 菜单中的前三个选项与你操作系统上安装的其他 Nsight 工具相关。也就是说，如果你的操作系统上未安装 NVIDIANsight Compute、Nsight Graphics 或 Nsight Systems，这里可能不会显示它们。
-
-
-例如，在我的系统中搜索 ``Insight'' 后，可以看到已经安装了 Nsight Compute、NsightSystems 甚至 Nsight Graphics。这意味着你可以非常方便地直接从 Visual Studio内部打开这些工
-
-具来分析你的应用程序。
+例如，在我的系统中搜索 ``Insight'' 后，可以看到已经安装了 Nsight Compute、NsightSystems 甚至 Nsight Graphics。
+这意味着你可以非常方便地直接从 Visual Studio内部打开这些工具来分析你的应用程序。
 
 \textbf{优势：} 你不需要专门去开始菜单打开 Nsight Compute，然后再尝试将进程附加（Attach）
-到工具上才能启动性能分析。现在这些繁琐的步骤都不需要了。你只需打开你的 CUDA 应用程序，转到 \textbf
-{扩展 $\rightarrow$ Nsight $\rightarrow$ Compute $\rightarrow$ Profile}
+到工具上才能启动性能分析。现在这些繁琐的步骤都不需要了。你只需打开你的 CUDA 应用程序，转到 \textbf{扩展 $\rightarrow$ Nsight $\rightarrow$ Compute $\rightarrow$ Profile}
 即可直接开始分析。同样的方法也适用于 Nsight Graphics 工具。
 
 \subsection{核心调试选项}
@@ -68,9 +63,7 @@
 
 以上内容就是我们在开始阶段需要了解和使用的内容摘要。相关文档链接（NVIDIA Nsight Visual StudioEdition）我也会添加进本讲资源中。
 
-
 \subsection{CUDA GPU并行编程课程笔记：Visual Studio调试技巧（第二部分）}
-
 \subsection{调试器的核心功能与界面概览}
 正如上一讲所述，你需要安装这个独立的工具，它将为 Visual Studio增添强大的调试功能。通过该调试器，你可以直观
 地查看以下关键信息：
@@ -124,7 +117,6 @@
 
 
 \subsection{掌握CUDA GPU并行编程（硬件与软件）\\P38: Nsight Compute}
-
 \section*{摘要}
 本节课程详细演示了如何使用 NVIDIA Nsight Compute 的调试功能对 CUDA向量加法程序进行逐步分析。
 内容涵盖 GPU 调试窗口的使用、启动配置（LaunchConfiguration）参数的解读、单步执行（Step Over）观察变量变化，以及通过内存视图（MemoryWindow）验证数组 A、B、C的十六进制存储布局。课程重点解释了整
@@ -207,8 +199,7 @@
 
 \section*{结语}
 本节掌握了 Nsight Compute内存视图的核心用法，建立了代码变量与物理内存地址之间的映射关系。理解十六进制布局
-与调试暂停机制，是进行底层 CUDA性能分析与错误排查的基础。下一节我们将进一步探讨汇编代码视图，从指令级别分析内核行为
-。
+与调试暂停机制，是进行底层 CUDA性能分析与错误排查的基础。下一节我们将进一步探讨汇编代码视图，从指令级别分析内核行为。
 
 
 \subsection{掌握CUDA GPU并行编程（硬件与软件）SASS汇编分析与Visual Studio集成Nsight工具}
@@ -253,8 +244,8 @@ CUDA C++代码与SASS指令并非一一对应，编译器会进行多种优化�
 \subsection{Visual Studio集成Nsight工具}
 
 \subsection{传统命令行方式的局限}
-此前性能分析需在Linux终端或WSL中手动执行：先运行CUDA程序使其暂停，再通过 \texttt
-{ncu--attach} 附加分析器，最后启动GUI加载结果。此流程繁琐且易出错。
+此前性能分析需在Linux终端或WSL中手动执行：先运行CUDA程序使其暂停，再通过 \texttt{ncu--attach} 附加分析器，
+最后启动GUI加载结果。此流程繁琐且易出错。
 
 \subsection{VS扩展一键启动}
 Visual Studio通过Nsight扩展简化了全流程：
@@ -278,8 +269,7 @@ Visual Studio通过Nsight扩展简化了全流程：
     \end{itemize}
 \end{enumerate}
 
-\textbf{关键提示：} 重点关注内核\textbf{持续时间（Duration）}，此为后续向量规约优化中对比不同
-实现性能的基准指标。
+\textbf{关键提示：} 重点关注内核\textbf{持续时间（Duration）}，此为后续向量规约优化中对比不同实现性能的基准指标。
 
 \subsection{交互式分析 vs 文件分析}
 \begin{itemize}
@@ -290,8 +280,7 @@ Visual Studio通过Nsight扩展简化了全流程：
 \subsection{Nsight Systems时间线分析}
 
 \subsection{启动与配置}
-通过 \texttt{Extensions > Nsight Systems > Start}启动。可选择收集GPU指标
-、CUDA Trace、上下文切换、CPU采样等。本例聚焦GPU行为。
+通过 \texttt{Extensions > Nsight Systems > Start}启动。可选择收集GPU指标、CUDA Trace、上下文切换、CPU采样等。本例聚焦GPU行为。
 
 \subsection{时间线核心解读}
 Nsight Systems提供毫秒级精度的系统级时间线，关键轨道包括：

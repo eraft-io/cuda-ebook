@@ -2,8 +2,6 @@
 
 \subsection{引言}
 本节文章将深入讲解专用于张量核心（Tensor Cores）编程的 \textbf{WMMA API}（WarpMatrix Multiply-Accumulate）。在正式介绍API之前，我们首先回顾GPU执行矩阵乘法的四个通用步骤，以便
-
-
 理解WMMA如何映射到这些基础操作中。
 
 \subsection{矩阵乘法的核心步骤回顾}
@@ -17,8 +15,8 @@
 
 \subsection{WMMA API 核心概念}
 \subsection{定义与适用架构}
-WMMA 全称为 \textbf{Warp Synchronous MatrixMultiply-Accumulate}
-。与普通CUDA核心以线程块（Thread Block）为调度单位不同，WMMA是以 \textbf{Warp（线程束）} 为基本执行单元的矩阵运算接口。
+WMMA 全称为 \textbf{Warp Synchronous MatrixMultiply-Accumulate}。
+与普通CUDA核心以线程块（Thread Block）为调度单位不同，WMMA是以 \textbf{Warp（线程束）} 为基本执行单元的矩阵运算接口。
 
 \begin{itemize}
     \item \textbf{硬件要求}：仅适用于计算能力（Compute Capability）$\geq 7.0$ 的设备。
@@ -42,9 +40,7 @@ WMMA 不支持任意尺寸的分块，必须使用预定义的形状。常见组
     \item \textbf{Row-Major}：按行连续存储。
     \item \textbf{Col-Major}：按列连续存储。
 \end{itemize}
-\textbf{优化提示}：为最大化内存合并访问效率，通常建议矩阵A使用 Col-Major（便于按列加载），矩阵B使用
-Row-Major（便于按行加载），具体取决于内核的遍历策略。错误的布局会导致非合并访问，显著增加缓存未命中率和内存请求
-次数。
+\textbf{优化提示}：为最大化内存合并访问效率，通常建议矩阵A使用 Col-Major（便于按列加载），矩阵B使用Row-Major（便于按行加载），具体取决于内核的遍历策略。错误的布局会导致非合并访问，显著增加缓存未命中率和内存请求次数。
 
 \subsection{WMMA 关键指令}
 \begin{lstlisting}

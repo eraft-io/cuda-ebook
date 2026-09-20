@@ -11,8 +11,7 @@
 
 \subsection{基本参数与Warp划分}
 在本案例中，矩阵 $A$、$B$、$C$ 的尺寸均为 $N=1024$，分块尺寸（Tile Size）设为16。核函数定
-义为 \texttt{matrixMultiplyFP32}，输出为单精度浮点数（FP32），输入为半精度浮点数（FP1
-6）。
+义为 \texttt{matrixMultiplyFP32}，输出为单精度浮点数（FP32），输入为半精度浮点数（FP16）。
 
 Warp ID 的获取与大矩阵的分块映射逻辑如下：
 \begin{itemize}

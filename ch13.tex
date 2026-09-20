@@ -21,10 +21,10 @@ CUDA 开发的核心是 CUDA 编译器，即 \texttt{nvcc}编译器。它供开�
 
 \subsection{优化库}
 
-CUDA 拥有一套优化库的支持，每个库都有其专门用途。例如，\textbf{cuBLAS} 和\textbf
-{cuFFT}分别在线性代数和快速傅里叶变换运算方面表现突出。这些库经过高度优化，能显著提升性能。此外还
-有\textbf{curand} 库，专门用于随机数生成；以及 \textbf{cuDNN}库，这是一个为神经网络加速设
-计的深度学习库。这些库是高效 GPU编程的支柱，提供了预先优化的即用型函数，节省开发时间并增强性能。
+CUDA 拥有一套优化库的支持，每个库都有其专门用途。例如，\textbf{cuBLAS} 和\textbf{cuFFT}分别在线性代数
+和快速傅里叶变换运算方面表现突出。这些库经过高度优化，能显著提升性能。此外还有\textbf{curand} 库，专门用于随机数生成；
+以及 \textbf{cuDNN}库，这是一个为神经网络加速设计的深度学习库。这些库是高效 GPU编程的支柱，提供了预先优化的即用型函数，节省开发时间并增强性能。
+
 
 \begin{figure}
     \centering
@@ -36,18 +36,17 @@ CUDA 拥有一套优化库的支持，每个库都有其专门用途。例如，
 \subsection{运行时API}
 
 CUDA 工具包还提供了运行时 API（RuntimeAPI），用于管理设备初始化、内存分配以及内核启动。它们对于管理应
-用程序与 GPU 的交互至关重要。例如，对于 CPU和 GPU 之间的内存操作或数据传输，我们可以使用以下 API 函数
-：
+用程序与 GPU 的交互至关重要。例如，对于 CPU和 GPU 之间的内存操作或数据传输，我们可以使用以下 API 函数：
+
 \begin{itemize}
     \item \texttt{cudaMalloc}：在 GPU 设备上分配指定大小的内存。这类似于标准 C 语言中的 \texttt{malloc}，但专用于 GPU 而非 CPU 内存分配。
     \item \texttt{cudaMemcpy}：用于在主机（CPU）和设备（GPU）之间复制数据。
 \end{itemize}
-以上是运行时 API 函数的两个典型示例。
 
+以上是运行时 API 函数的两个典型示例。
 \subsection{调试与分析工具}
 
-在这张幻灯片中我想强调，对于 GPU应用程序来说，工作不止于编写代码，还关乎确保效率和稳定性。这就是为什么英伟达工具包包
-含了强大的工具：
+在这张幻灯片中我想强调，对于 GPU应用程序来说，工作不止于编写代码，还关乎确保效率和稳定性。这就是为什么英伟达工具包含了强大的工具：
 \begin{itemize}
     \item \textbf{Nsight Systems} 和 \textbf{Nsight Compute}：用于分析和剖析应用程序的性能。
     \item \textbf{cuda-gdb}：提供在 Linux 和 macOS 操作系统上调试 CUDA 应用程序的强大环境。

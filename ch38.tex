@@ -140,13 +140,12 @@ GPU 的计算单元由多个流式多处理器（SM）组成。假设当前 GPU 
 \end{itemize}
 
 \subsection{总结与后续优化方向}
-本节课我们完成了向量归约的完整 Host/Device 代码编写，并学会了使用 Nsight Compute分析性能指标
-。当前的“仅使用全局内存+跨步访问”版本存在以下明显缺陷，将在后续课程中优化：
+本节课我们完成了向量归约的完整 Host/Device 代码编写，并学会了使用 Nsight Compute分析性能指标。
+当前的“仅使用全局内存+跨步访问”版本存在以下明显缺陷，将在后续课程中优化：
 \begin{enumerate}
     \item \textbf{非合并访存（Non-coalesced Access）}：随着 Stride 增大，相邻线程访问的内存地址跨度越来越大，导致内存事务（Memory Transactions）浪费。
     \item \textbf{线程发散（Thread Divergence）}：\lstinline{if (tid \% (2*stride) == 0)} 导致 Warp 内一半线程闲置，产生严重的分支发散。
     \item \textbf{尾部效应（Tail Effect）}：最后几级 Kernel 启动的 Block 数极少，导致大量 SM 闲置。
 \end{enumerate}
 \textbf{下一步计划}：引入 \textbf{共享内存（Shared Memory）} 来消除全局内存的重复访问，
-并采用 \textbf{交错寻址（Interleaved Addressing）} 或 \textbf
-{Warp Shuffle} 指令来彻底解决线程发散和同步开销问题。
+并采用 \textbf{交错寻址（Interleaved Addressing）} 或 \textbf{Warp Shuffle} 指令来彻底解决线程发散和同步开销问题。

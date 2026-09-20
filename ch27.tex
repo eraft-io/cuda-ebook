@@ -26,9 +26,8 @@
     \label{fig:placeholder}
 \end{figure}
 
-这里我想告诉你，我不会解释所有这些工具，我将只专注于 Nsight 套件中三个最重要的工具：NsightCompute、
-Nsight Systems 和 NsightGraphics。这里的这张图解释了这三个工具之间的关系。如图所示，该图从
-Nsight Systems开始，它相对于其他两个工具是外层的，这表明该工具更适合将应用程序作为一个整体来检查，而不是专
+这里我想告诉你，我不会解释所有这些工具，我将只专注于 Nsight 套件中三个最重要的工具：NsightCompute、Nsight Systems 和 NsightGraphics。
+这里的这张图解释了这三个工具之间的关系。如图所示，该图从 Nsight Systems开始，它相对于其他两个工具是外层的，这表明该工具更适合将应用程序作为一个整体来检查，而不是专
 注于单个内核。这个工具即Nsight Systems被推荐给开发者，用于对其应用程序性能进行全系统范围的分析。当你考虑到
 一个应用程序可能包含多个内核，而不仅仅是一个时，这种区别就变得明显了。该工具可以可视化CPU 到 GPU 的交互使用情况
 ，以及 CUDA Runtime API的性能，还能分析多节点工作负载。这就是为什么我们可以说 Nsight Systems是一个服务器端分析工具，而不是客户端分析工具。这个工具就是我在之前的文章中分析向量加法应用程序时演示过的同一个工具。

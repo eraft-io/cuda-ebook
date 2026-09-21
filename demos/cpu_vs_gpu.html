@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CPU vs GPU 架构对比</title>
+<style>
+:root {
+  --bg: #0f172a; --card: #1e293b; --border: #334155;
+  --cpu: #3b82f6; --cpu-light: #60a5fa; --cpu-glow: rgba(59,130,246,0.3);
+  --gpu: #10b981; --gpu-light: #34d399; --gpu-glow: rgba(16,185,129,0.3);
+  --alu: #f59e0b; --cache: #8b5cf6; --ctrl: #ef4444;
+  --text: #e2e8f0; --text2: #94a3b8;
+  --radius: 16px;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: var(--bg); color: var(--text); min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── Header ── */
+header {
+  text-align: center; padding: 3rem 1rem 2rem;
+  background: linear-gradient(180deg, rgba(59,130,246,0.08) 0%, transparent 100%);
+}
+header h1 {
+  font-size: 2.4rem; font-weight: 800; letter-spacing: -0.02em;
+  background: linear-gradient(135deg, var(--cpu-light), var(--gpu-light));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+header p { color: var(--text2); margin-top: .6rem; font-size: 1.1rem; }
+
+/* ── Layout ── */
+main { max-width: 1300px; margin: 0 auto; padding: 0 1.5rem 4rem; }
+
+/* ── Canvas Area ── */
+.canvas-row {
+  display: grid; grid-template-columns: 1fr 80px 1fr;
+  gap: 1rem; align-items: start; margin: 2rem 0;
+}
+@media (max-width: 900px) {
+  .canvas-row { grid-template-columns: 1fr; }
+  .vs-divider { display: none; }
+}
+.vs-divider {
+  display: flex; align-items: center; justify-content: center;
+  font-size: 2rem; font-weight: 900; padding-top: 120px;
+  background: linear-gradient(180deg, var(--cpu-light), var(--gpu-light));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+
+.chip-card {
+  background: var(--card); border-radius: var(--radius);
+  border: 1px solid var(--border); overflow: hidden;
+  transition: transform .3s, box-shadow .3s;
+}
+.chip-card:hover { transform: translateY(-4px); box-shadow: 0 20px 40px rgba(0,0,0,.3); }
+.chip-card.cpu { border-top: 3px solid var(--cpu); }
+.chip-card.gpu { border-top: 3px solid var(--gpu); }
+.chip-header {
+  padding: 1.2rem 1.5rem; display: flex; align-items: center; gap: .8rem;
+  font-size: 1.2rem; font-weight: 700;
+}
+.chip-header.cpu { background: rgba(59,130,246,0.1); }
+.chip-header.gpu { background: rgba(16,185,129,0.1); }
+.chip-icon { font-size: 1.6rem; }
+.chip-body { padding: 1.5rem; min-height: 420px; }
+
+canvas { display: block; max-width: 100%; border-radius: 8px; }
+
+/* ── Metrics ── */
+.metrics-section { margin: 3rem 0; }
+.metrics-section h2 {
+  text-align: center; font-size: 1.6rem; margin-bottom: 2rem;
+}
+.metrics-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+}
+.metric-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 1.5rem; text-align: center;
+  transition: transform .2s;
+}
+.metric-card:hover { transform: translateY(-2px); }
+.metric-label { font-size: .85rem; color: var(--text2); margin-bottom: .4rem; }
+.metric-bar-container {
+  display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; margin-top: .8rem;
+}
+.metric-bar-group { text-align: center; }
+.metric-bar-label { font-size: .7rem; color: var(--text2); margin-bottom: .3rem; }
+.metric-bar {
+  height: 8px; border-radius: 4px; margin: .3rem 0; position: relative;
+  overflow: hidden;
+}
+.metric-bar.cpu-bar { background: rgba(59,130,246,0.2); }
+.metric-bar.gpu-bar { background: rgba(16,185,129,0.2); }
+.metric-bar-fill {
+  height: 100%; border-radius: 4px; transition: width 1.2s cubic-bezier(.4,0,.2,1);
+}
+.metric-bar-fill.cpu { background: var(--cpu); }
+.metric-bar-fill.gpu { background: var(--gpu); }
+.metric-value { font-size: 1.1rem; font-weight: 700; }
+
+/* ── Exec Mode Animation ── */
+.exec-section { margin: 3rem 0; }
+.exec-section h2 { text-align: center; font-size: 1.6rem; margin-bottom: 1.5rem; }
+.exec-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+@media (max-width: 700px) { .exec-grid { grid-template-columns: 1fr; } }
+.exec-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 1.5rem; text-align: center;
+}
+.exec-card h3 { font-size: 1.1rem; margin-bottom: 1rem; }
+.exec-canvas { max-width: 100%; height: 220px; border-radius: 8px; }
+
+/* ── Button ── */
+.controls { text-align: center; margin: 1.5rem 0; }
+.btn {
+  background: var(--card); border: 1px solid var(--border); color: var(--text);
+  padding: .6rem 1.4rem; border-radius: 8px; font-size: .9rem; cursor: pointer;
+  margin: 0 .3rem; transition: all .2s;
+}
+.btn:hover { border-color: var(--cpu-light); color: var(--cpu-light); }
+.btn.active { background: rgba(59,130,246,0.15); border-color: var(--cpu); }
+
+/* ── Legend ── */
+.legend {
+  display: flex; gap: 1.5rem; justify-content: center; flex-wrap: wrap;
+  margin: 1rem 0; font-size: .85rem;
+}
+.legend-item { display: flex; align-items: center; gap: .4rem; }
+.legend-dot { width: 12px; height: 12px; border-radius: 3px; }
+.legend-dot.alu-bg { background: var(--alu); }
+.legend-dot.cache-bg { background: var(--cache); }
+.legend-dot.ctrl-bg { background: var(--ctrl); }
+
+footer {
+  text-align: center; padding: 2rem; color: var(--text2);
+  font-size: .85rem; border-top: 1px solid var(--border); margin-top: 3rem;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>CPU 与 GPU 架构对比</h1>
+  <p>顺序执行 vs 大规模并行 —— 两种截然不同的计算范式</p>
+</header>
+
+<main>
+
+<!-- ── Canvas Row ── -->
+<div class="canvas-row">
+  <div class="chip-card cpu">
+    <div class="chip-header cpu">
+      <span class="chip-icon">🖥️</span> CPU 架构（中央处理器）
+    </div>
+    <div class="chip-body">
+      <canvas id="cpuCanvas"></canvas>
+    </div>
+  </div>
+  <div class="vs-divider">VS</div>
+  <div class="chip-card gpu">
+    <div class="chip-header gpu">
+      <span class="chip-icon">🎮</span> GPU 架构（图形处理器）
+    </div>
+    <div class="chip-body">
+      <canvas id="gpuCanvas"></canvas>
+    </div>
+  </div>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot alu-bg"></div> ALU / Core（计算单元）</div>
+  <div class="legend-item"><div class="legend-dot cache-bg"></div> Cache / 缓存</div>
+  <div class="legend-item"><div class="legend-dot ctrl-bg"></div> Control / 控制器</div>
+</div>
+
+<!-- ── Metrics ── -->
+<section class="metrics-section">
+  <h2>关键参数对比</h2>
+  <div class="metrics-grid">
+
+    <div class="metric-card">
+      <div class="metric-label">计算核心数量</div>
+      <div class="metric-bar-container">
+        <div class="metric-bar-group">
+          <div class="metric-bar-label">CPU</div>
+          <div class="metric-value" style="color:var(--cpu-light)">4~32</div>
+          <div class="metric-bar cpu-bar"><div class="metric-bar-fill cpu" style="width:4%"></div></div>
+        </div>
+        <div class="metric-bar-group">
+          <div class="metric-bar-label">GPU</div>
+          <div class="metric-value" style="color:var(--gpu-light)">~7,000</div>
+          <div class="metric-bar gpu-bar"><div class="metric-bar-fill gpu" style="width:100%"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="metric-card">
+      <div class="metric-label">时钟频率</div>
+      <div class="metric-bar-container">
+        <div class="metric-bar-group">
+          <div class="metric-bar-label">CPU</div>
+          <div class="metric-value" style="color:var(--cpu-light)">3~5 GHz</div>
+          <div class="metric-bar cpu-bar"><div class="metric-bar-fill cpu" style="width:100%"></div></div>
+        </div>
+        <div class="metric-bar-group">
+          <div class="metric-bar-label">GPU</div>
+          <div class="metric-value" style="color:var(--gpu-light)">0.7~1.2 GHz</div>
+          <div class="metric-bar gpu-bar"><div class="metric-bar-fill gpu" style="width:26%"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="metric-card">
+      <div class="metric-label">缓存层级</div>
+      <div class="metric-bar-container">
+        <div class="metric-bar-group">
+          <div class="metric-bar-label">CPU</div>
+          <div class="metric-value" style="color:var(--cpu-light)">L1/L2/L3</div>
+          <div class="metric-bar cpu-bar"><div class="metric-bar-fill cpu" style="width:100%"></div></div>
+        </div>
+        <div class="metric-bar-group">
+          <div class="metric-bar-label">GPU</div>
+          <div class="metric-value" style="color:var(--gpu-light)">L1/L2</div>
+          <div class="metric-bar gpu-bar"><div class="metric-bar-fill gpu" style="width:66%"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="metric-card">
+      <div class="metric-label">并发线程数</div>
+      <div class="metric-bar-container">
+        <div class="metric-bar-group">
+          <div class="metric-bar-label">CPU</div>
+          <div class="metric-value" style="color:var(--cpu-light)">~64</div>
+          <div class="metric-bar cpu-bar"><div class="metric-bar-fill cpu" style="width:2%"></div></div>
+        </div>
+        <div class="metric-bar-group">
+          <div class="metric-bar-label">GPU</div>
+          <div class="metric-value" style="color:var(--gpu-light)">~200,000</div>
+          <div class="metric-bar gpu-bar"><div class="metric-bar-fill gpu" style="width:100%"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="metric-card">
+      <div class="metric-label">单核性能</div>
+      <div class="metric-bar-container">
+        <div class="metric-bar-group">
+          <div class="metric-bar-label">CPU</div>
+          <div class="metric-value" style="color:var(--cpu-light)">极强</div>
+          <div class="metric-bar cpu-bar"><div class="metric-bar-fill cpu" style="width:100%"></div></div>
+        </div>
+        <div class="metric-bar-group">
+          <div class="metric-bar-label">GPU</div>
+          <div class="metric-value" style="color:var(--gpu-light)">较弱</div>
+          <div class="metric-bar gpu-bar"><div class="metric-bar-fill gpu" style="width:15%"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="metric-card">
+      <div class="metric-label">适用场景</div>
+      <div class="metric-bar-container">
+        <div class="metric-bar-group">
+          <div class="metric-bar-label">CPU</div>
+          <div class="metric-value" style="color:var(--cpu-light)">顺序/分支密集</div>
+          <div class="metric-bar cpu-bar"><div class="metric-bar-fill cpu" style="width:100%"></div></div>
+        </div>
+        <div class="metric-bar-group">
+          <div class="metric-bar-label">GPU</div>
+          <div class="metric-value" style="color:var(--gpu-light)">数据并行密集</div>
+          <div class="metric-bar gpu-bar"><div class="metric-bar-fill gpu" style="width:100%"></div></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── 执行模式动画 ── -->
+<section class="exec-section">
+  <h2>执行模式对比</h2>
+  <div class="exec-grid">
+    <div class="exec-card">
+      <h3 style="color:var(--cpu-light)">🖥️ CPU 顺序执行</h3>
+      <canvas id="seqCanvas" class="exec-canvas"></canvas>
+      <p style="color:var(--text2);font-size:.85rem;margin-top:.5rem">
+        指令逐个串行，每条依赖前一条结果 → 低延迟
+      </p>
+    </div>
+    <div class="exec-card">
+      <h3 style="color:var(--gpu-light)">🎮 GPU 并行执行</h3>
+      <canvas id="parCanvas" class="exec-canvas"></canvas>
+      <p style="color:var(--text2);font-size:.85rem;margin-top:.5rem">
+        数千条独立指令同时执行 → 高吞吐量
+      </p>
+    </div>
+  </div>
+  <div class="controls">
+    <button class="btn active" onclick="replay()">🔄 重新播放</button>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  基于 CUDA GPU 并行编程完全指南 · 第 1 章
+</footer>
+
+<script>
+// ── Helper: draw a rounded rect ──
+function rrect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r, y); ctx.lineTo(x+w-r, y);
+  ctx.quadraticCurveTo(x+w, y, x+w, y+r);
+  ctx.lineTo(x+w, y+h-r);
+  ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+  ctx.lineTo(x+r, y+h);
+  ctx.quadraticCurveTo(x, y+h, x, y+r);
+  ctx.lineTo(x, y+r);
+  ctx.closePath();
+}
+
+// ── Draw CPU architecture ──
+function drawCPU(ctx, W, H) {
+  ctx.clearRect(0, 0, W, H);
+
+  // Chip background
+  ctx.fillStyle = '#1e293b';
+  rrect(ctx, 20, 20, W-40, H-40, 16);
+  ctx.fill();
+
+  // Label
+  ctx.fillStyle = '#94a3b8'; ctx.font = '13px "PingFang SC","Microsoft YaHei",sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('CPU Die', W/2, 45);
+
+  // Control Unit
+  ctx.fillStyle = '#ef4444';
+  rrect(ctx, W/2 - 50, 55, 100, 54, 8);
+  ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 11px sans-serif';
+  ctx.fillText('控制器', W/2, 88);
+
+  // ALUs (4 powerful)
+  const aluW = 70, aluH = 36, gap = 10;
+  const aluStartX = W/2 - (2 * aluW + gap) / 2;
+  for (let i = 0; i < 4; i++) {
+    const ax = aluStartX + (i % 2) * (aluW + gap);
+    const ay = 125 + Math.floor(i / 2) * (aluH + gap);
+    ctx.fillStyle = '#f59e0b';
+    rrect(ctx, ax, ay, aluW, aluH, 6);
+    ctx.fill();
+    ctx.fillStyle = '#1a1a2e'; ctx.font = 'bold 10px sans-serif';
+    ctx.fillText('ALU', ax + aluW/2, ay + aluH/1.7);
+  }
+
+  // Cache L1
+  ctx.fillStyle = '#8b5cf6';
+  rrect(ctx, 40, 210, W-80, 28, 6);
+  ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 10px sans-serif';
+  ctx.fillText('L1 Cache（指令 + 数据）', W/2, 229);
+
+  // Cache L2
+  ctx.fillStyle = '#7c3aed';
+  rrect(ctx, 40, 248, W-80, 28, 6);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.fillText('L2 Cache（大容量）', W/2, 267);
+
+  // Cache L3
+  ctx.fillStyle = '#6d28d9';
+  rrect(ctx, 40, 286, W-80, 28, 6);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.fillText('L3 Cache（共享，极大容量）', W/2, 305);
+
+  // DRAM
+  ctx.strokeStyle = '#475569'; ctx.lineWidth = 2;
+  ctx.setLineDash([6, 3]);
+  rrect(ctx, 50, 330, W-100, 50, 8);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#94a3b8'; ctx.font = 'bold 11px sans-serif';
+  ctx.fillText('DRAM / 全局内存', W/2, 360);
+}
+
+// ── Draw GPU architecture ──
+function drawGPU(ctx, W, H) {
+  ctx.clearRect(0, 0, W, H);
+
+  // Chip background
+  ctx.fillStyle = '#1e293b';
+  rrect(ctx, 20, 20, W-40, H-40, 16);
+  ctx.fill();
+
+  ctx.fillStyle = '#94a3b8'; ctx.font = '13px "PingFang SC","Microsoft YaHei",sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('GPU Die（以 A100 为例）', W/2, 45);
+
+  // L2 Cache
+  ctx.fillStyle = '#7c3aed';
+  rrect(ctx, 40, 55, W-80, 24, 6);
+  ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 10px sans-serif';
+  ctx.fillText('L2 Cache', W/2, 71);
+
+  // SM grid - draw many small SMs
+  const cols = 8, rows = 5;
+  const smW = (W - 100) / cols, smH = 30;
+  const startX = 45, startY = 90;
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const sx = startX + c * (smW + 2);
+      const sy = startY + r * (smH + 3);
+      // Each SM contains miniature cores
+      ctx.fillStyle = '#065f46';
+      rrect(ctx, sx, sy, smW, smH, 4);
+      ctx.fill();
+
+      // Mini cores inside SM
+      const coresPerSM = 6;
+      const coreW = (smW - 6) / coresPerSM;
+      for (let k = 0; k < coresPerSM; k++) {
+        ctx.fillStyle = '#f59e0b';
+        rrect(ctx, sx + 3 + k * coreW, sy + smH - 12, coreW - 2, 10, 2);
+        ctx.fill();
+      }
+      // SM label
+      ctx.fillStyle = '#34d399'; ctx.font = '7px sans-serif';
+      ctx.textAlign = 'center';
+      if (smW > 30) ctx.fillText('SM', sx + smW/2, sy + smH/2 + 3);
+    }
+  }
+
+  // Annotation: total SMs & cores
+  const smY = startY + rows * (smH + 3) + 15;
+  ctx.fillStyle = '#34d399'; ctx.font = 'bold 11px sans-serif';
+  ctx.fillText(`108 个 SM × 64 核 = ~7,000 CUDA Cores`, W/2, smY);
+
+  // Global Memory
+  ctx.strokeStyle = '#475569'; ctx.lineWidth = 2;
+  ctx.setLineDash([6, 3]);
+  rrect(ctx, 50, smY + 12, W-100, 40, 8);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#94a3b8'; ctx.font = 'bold 11px sans-serif';
+  ctx.fillText('HBM2e 全局内存（80GB）', W/2, smY + 38);
+}
+
+// ── Draw sequential execution animation ──
+function drawSeqAnim(ctx, W, H, progress) {
+  ctx.clearRect(0, 0, W, H);
+  const tasks = [
+    { label: 'ADD R1,R2,R3',  color: '#3b82f6', dep: null },
+    { label: 'MUL R4,R1,R5',  color: '#8b5cf6', dep: 0 },
+    { label: 'DIV R7,R4,R8',  color: '#f59e0b', dep: 1 },
+    { label: 'SUB R9,R7,R10', color: '#ef4444', dep: 2 },
+  ];
+
+  const taskH = 40, gap = 8, startX = 60, startY = 20;
+  const maxBarW = W - startX - 60;
+
+  tasks.forEach((t, i) => {
+    const y = startY + i * (taskH + gap);
+
+    // Task box
+    ctx.fillStyle = t.color + '33';
+    rrect(ctx, startX, y, maxBarW + 10, taskH, 6);
+    ctx.fill();
+    ctx.strokeStyle = t.color; ctx.lineWidth = 1.5;
+    rrect(ctx, startX, y, maxBarW + 10, taskH, 6);
+    ctx.stroke();
+
+    // Progress bar
+    const taskStart = i * 0.25;
+    const taskEnd = (i + 1) * 0.25;
+    const localP = Math.max(0, Math.min(1, (progress - taskStart) / 0.25));
+
+    if (localP > 0) {
+      ctx.fillStyle = t.color;
+      rrect(ctx, startX + 2, y + 2, (maxBarW + 6) * localP, taskH - 4, 4);
+      ctx.fill();
+    }
+
+    // Label
+    ctx.fillStyle = '#e2e8f0'; ctx.font = 'bold 12px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText(t.label, startX + 10, y + taskH / 1.6);
+
+    // Dependency arrow
+    if (t.dep !== null && localP > 0.1) {
+      ctx.strokeStyle = t.color; ctx.lineWidth = 2;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath();
+      const prevY = startY + t.dep * (taskH + gap) + taskH;
+      ctx.moveTo(startX + maxBarW/2, prevY);
+      ctx.lineTo(startX + maxBarW/2, y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  });
+
+  // Time axis
+  ctx.strokeStyle = '#475569'; ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(startX, startY + tasks.length * (taskH + gap) + 10);
+  ctx.lineTo(startX + maxBarW, startY + tasks.length * (taskH + gap) + 10);
+  ctx.stroke();
+  ctx.fillStyle = '#94a3b8'; ctx.font = '10px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText('0', startX, startY + tasks.length * (taskH + gap) + 25);
+  ctx.textAlign = 'right';
+  ctx.fillText('t', startX + maxBarW, startY + tasks.length * (taskH + gap) + 25);
+}
+
+// ── Draw parallel execution animation ──
+function drawParAnim(ctx, W, H, progress) {
+  ctx.clearRect(0, 0, W, H);
+  const tasks = [
+    { label: 'ADD', color: '#3b82f6' },
+    { label: 'MUL', color: '#8b5cf6' },
+    { label: 'DIV', color: '#f59e0b' },
+    { label: 'SUB', color: '#ef4444' },
+    { label: 'ADD', color: '#3b82f6' },
+    { label: 'MUL', color: '#8b5cf6' },
+    { label: 'ADD', color: '#3b82f6' },
+    { label: 'DIV', color: '#f59e0b' },
+  ];
+
+  const cols = 4, rows = 2;
+  const cellW = (W - 60) / cols, cellH = (H - 50) / rows;
+  const startX = 15, startY = 10;
+
+  tasks.forEach((t, i) => {
+    const c = i % cols, r = Math.floor(i / cols);
+    const cx = startX + c * cellW, cy = startY + r * cellH;
+    const bw = cellW - 14, bh = cellH - 14;
+
+    // Cell border
+    ctx.fillStyle = t.color + '11';
+    rrect(ctx, cx + 4, cy + 4, bw, bh, 6);
+    ctx.fill();
+
+    // Progress fill
+    ctx.fillStyle = t.color;
+    rrect(ctx, cx + 4, cy + 4, bw * Math.min(1, progress * 1.5 - i * 0.05), bh, 6);
+    ctx.fill();
+
+    // Label
+    ctx.fillStyle = '#e2e8f0'; ctx.font = 'bold 11px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(t.label, cx + bw/2 + 4, cy + bh/1.8);
+    ctx.fillStyle = '#94a3b8'; ctx.font = '9px sans-serif';
+    ctx.fillText(`Core #${i+1}`, cx + bw/2 + 4, cy + bh/2.6);
+  });
+
+  // Time label
+  ctx.fillStyle = '#34d399'; ctx.font = 'bold 11px sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillText('所有任务同时完成 → 1 个周期', W - 20, H - 8);
+}
+
+// ── HiDPI canvas setup ──
+function setupCanvas(canvas, w, h) {
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  canvas.style.width = w + 'px';
+  canvas.style.height = h + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  return ctx;
+}
+
+// ── Animation state ──
+let animProgress = 0;
+let animId = null;
+
+function replay() {
+  animProgress = 0;
+  if (animId) cancelAnimationFrame(animId);
+  animate();
+}
+
+function animate() {
+  animProgress += 0.005;
+  if (animProgress > 1.3) animProgress = 1.3;
+
+  const seqCanvas = document.getElementById('seqCanvas');
+  const parCanvas = document.getElementById('parCanvas');
+  if (seqCanvas && parCanvas) {
+    const sCtx = setupCanvas(seqCanvas, EXEC_W, EXEC_H);
+    const pCtx = setupCanvas(parCanvas, EXEC_W, EXEC_H);
+    drawSeqAnim(sCtx, EXEC_W, EXEC_H, Math.min(1, animProgress));
+    drawParAnim(pCtx, EXEC_W, EXEC_H, Math.min(1, animProgress));
+  }
+
+  if (animProgress < 1.3) {
+    animId = requestAnimationFrame(animate);
+  }
+}
+
+// ── Init ──
+const CPU_W = 420, CPU_H = 420, GPU_W = 420, GPU_H = 420;
+const EXEC_W = 520, EXEC_H = 220;
+
+function init() {
+  const cpuCanvas = document.getElementById('cpuCanvas');
+  const gpuCanvas = document.getElementById('gpuCanvas');
+  const cpuCtx = setupCanvas(cpuCanvas, CPU_W, CPU_H);
+  const gpuCtx = setupCanvas(gpuCanvas, GPU_W, GPU_H);
+  drawCPU(cpuCtx, CPU_W, CPU_H);
+  drawGPU(gpuCtx, GPU_W, GPU_H);
+
+  // Setup exec canvases for animation
+  const seqCanvas = document.getElementById('seqCanvas');
+  const parCanvas = document.getElementById('parCanvas');
+  setupCanvas(seqCanvas, EXEC_W, EXEC_H);
+  setupCanvas(parCanvas, EXEC_W, EXEC_H);
+
+  // Start animation
+  setTimeout(replay, 600);
+}
+
+window.addEventListener('DOMContentLoaded', init);
+window.addEventListener('resize', () => {
+  const cpuCanvas = document.getElementById('cpuCanvas');
+  const gpuCanvas = document.getElementById('gpuCanvas');
+  const cpuCtx = setupCanvas(cpuCanvas, CPU_W, CPU_H);
+  const gpuCtx = setupCanvas(gpuCanvas, GPU_W, GPU_H);
+  drawCPU(cpuCtx, CPU_W, CPU_H);
+  drawGPU(gpuCtx, GPU_W, GPU_H);
+
+  const seqCanvas = document.getElementById('seqCanvas');
+  const parCanvas = document.getElementById('parCanvas');
+  setupCanvas(seqCanvas, EXEC_W, EXEC_H);
+  setupCanvas(parCanvas, EXEC_W, EXEC_H);
+});
+</script>
+</body>
+</html>

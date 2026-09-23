@@ -1,15 +1,10 @@
 \section{CUDA运行时API详解与设备属性查询}
 
-大家好，在今天的文章中我将解释CUDA运行时API（RuntimeAPI）。CUDA运行时API为CUDA提供了一个高级
-接口，它使开发者能够高效地利用NVIDIA GPU的能力来完成广泛的计算任务。这些API简化了管理GPU设备、内存分配以及
-执行并行内核的过程。
+本章将解释 CUDA 运行时 API（Runtime API）。CUDA 运行时 API 为 CUDA 提供了一个高级接口，使开发者能够高效地利用 NVIDIA GPU 的能力来完成广泛的计算任务。这些 API 简化了管理 GPU 设备、内存分配以及执行并行核函数的过程。
 
-运行时API可供程序员用来开发优化或运行GPU加速的应用程序。这种方法是一个省时的替代方案，无需阅读GPU白皮书中详细的
-文档。例如，无需深入研究白皮书来查找设备限制和约束。就像我们在前一节中解释的那样，例如每个块的最大线程数，这些API提供
-了函数，允许你直接从GPU查询那个值。
+运行时 API 可供程序员用来开发优化或运行 GPU 加速的应用程序。这种方法是一个省时的替代方案，无需阅读 GPU 白皮书中详细的文档。例如，无需深入研究白皮书来查找设备限制和约束。正如在前一章中解释的那样，例如每个块的最大线程数，这些 API 提供了函数，可以直接从 GPU 查询该值。
 
-让我们来查看这个专门用于运行时API函数的网页。如这个网页所示，我们有数十个函数，涵盖设备管理（例如这个函数）、内存处理
-（比如这一个）以及异步计算。如果你想从运行时API中找到任何函数，你需要来到这个网页。
+查看专门用于运行时 API 函数的网页，如所示，有数十个函数，涵盖设备管理、内存处理以及异步计算。如果想从运行时 API 中找到任何函数，可以参考该网页。
 
 \subsection{核心函数：cudaGetDeviceProperties}
 
@@ -27,13 +22,10 @@ API函数最常见的例子之一是 \texttt{cudaGetDeviceProperties}函数。�
 
 \subsection{项目创建与代码实现}
 
-为了开始我们今天的项目，我们需要进入创建CUDA文件的CUDA课程文件夹，然后从这里创建一个新文件。如我们所见，我选择
-了 \texttt{section\_4\_01\_runtime\_api}，但在这里我要删除 \texttt{.txt} 并写上 \texttt{.cu}，
-因为我们需要一个 \texttt{.cu}文件，而不是文本文件。然后你需要做的就是来到这里并打开这个文件，
-使用任何编辑器（例如Visual StudioCode），然后点击 \texttt{Ctrl+S} 来保存我们的文件。
+开始本章项目时，进入 CUDA 课程文件夹，创建一个新文件。选择 \texttt{section\_4\_01\_runtime\_api}，
+将扩展名从 \texttt{.txt} 改为 \texttt{.cu}，因为需要一个 \texttt{.cu} 文件，而非文本文件。然后使用任意编辑器（例如 Visual Studio Code）打开这个文件，点击 \texttt{Ctrl+S} 保存。
 
-我要打开它，复制代码并粘贴到这个文件中。这里我想提醒你，这段代码的主要目的是查询GPU的一些属性，我们不需要进行任何计算。
-这就是为什么我们在主函数之前没有任何GPU内核，就像我们在所有先前项目中习惯做的那样。
+打开它，复制代码并粘贴到这个文件中。这段代码的主要目的是查询 GPU 的一些属性，不需要进行任何计算，因此在主函数之前没有 GPU 核函数。
 
 \subsection{代码解析}
 
@@ -91,7 +83,7 @@ int main() {
     \label{fig:placeholder}
 \end{figure}
 
-让我们从这里开始：
+从代码开始分析：
 
 \begin{enumerate}
     \item 我们包含 \texttt{stdio.h} 库，以便能够使用 \texttt{printf}。
@@ -105,7 +97,7 @@ int main() {
 
 \subsection{编译与运行验证}
 
-使用NVCC编译器编译代码：
+使用 NVCC 编译器编译代码：
 
 \begin{verbatim}
 nvcc -o runtime_api section_4_01_runtime_api.cu
@@ -131,9 +123,8 @@ nvcc -o runtime_api section_4_01_runtime_api.cu
 \end{figure}
 
 
-\textbf{思考题：} 已知每个Warp由32个线程组成，根据每块最大线程数1024，每个块的最大Warp数量是多少
-？\[\text{Max Warps per Block} = \frac{1024}{32} = 32\]请注意区分“
-块”（软件概念）和“SM”（硬件概念）。块在SM上执行，我们需要这个值来计算另一个性能指标——占用率（Occupancy）。
+\textbf{思考题：} 已知每个 Warp 由 32 个线程组成，根据每块最大线程数 1024，每个块的最大 Warp 数量是多少？
+\[\text{Max Warps per Block} = \frac{1024}{32} = 32\]请注意区分"块"（软件概念）和"SM"（硬件概念）。块在 SM 上执行，这个值可用于计算另一个性能指标——占用率（Occupancy）。
 
 \subsection{关键要点总结}
 
@@ -142,7 +133,7 @@ nvcc -o runtime_api section_4_01_runtime_api.cu
     
     \item \textbf{错误检查}: 运行时API函数返回它们的执行状态（\texttt{cudaError\_t}），该状态可以被捕获以供后续检查。如果成功则返回 \texttt{cudaSuccess}，否则返回错误代码，可用于分析故障原因。
     
-    \item \textbf{效率优势}: 使用运行时API节省了大量时间。替代方案是在白皮书中查阅大量内容才能获取每一个参数值。虽然白皮书中有表格包含许多值，但并非全部，且API能动态反映当前设备的真实状态。
+    \item \textbf{效率优势}: 使用运行时 API 节省了大量时间。替代方案是在白皮书中查阅大量内容才能获取每一个参数值。虽然白皮书中有表格包含许多值，但并非全部，且 API 能动态反映当前设备的真实状态。
 \end{enumerate}
 
-今天就到这里，下个文章见。你需要知道如何使用运行时API，因为在接下来的文章中，我们在检查或分析性能时需要这些值。
+需要掌握如何使用运行时 API，因为在后续章节中，检查或分析性能时需要这些值。

@@ -1,10 +1,7 @@
 \section{NVIDIA系统管理接口（nvidia-smi）详解}
 
-大家好，今天我将解释NVIDIA系统管理接口（System Management Interface），即\texttt{nvidia-smi}。
-\texttt{nvidia-smi}是NVIDIA提供的一个命令行工具，它为NVIDIA GPU提供监控和管理功能。
-我们也可以将\texttt{nvidia-smi} 视为一个强大的工具，供那些希
-望实时检查其 NVIDIA GPU状态的用户使用。今天我们将探讨 \texttt{nvidia-smi} 的一些关键特性
-以及使用示例。
+本章将解释 NVIDIA 系统管理接口（System Management Interface），即 \texttt{nvidia-smi}。
+\texttt{nvidia-smi} 是 NVIDIA 提供的一个命令行工具，为 NVIDIA GPU 提供监控和管理功能，可实时检查 NVIDIA GPU 状态。本章将探讨 \texttt{nvidia-smi} 的一些关键特性及使用示例。
 
 \subsection{nvidia-smi 的三大关键领域}
 
@@ -19,13 +16,13 @@
 
 \begin{enumerate}
     \item \textbf{性能监控}: 可用于实时监控GPU性能，包括GPU资源利用率、内存使用情况、温度以及功耗。这些数据对于高效优化GPU资源至关重要。
-    \item \textbf{设置管理}: 提供了调整或控制GPU内存和核心时钟速度的灵活性。我们不仅仅是读取性能指标，还可以控制影响性能的参数。此外，可以为GPU功耗设定限制。
+    \item \textbf{设置管理}: 提供了调整或控制 GPU 内存和核心时钟速度的灵活性。不仅可以读取性能指标，还可以控制影响性能的参数。此外，可以为GPU功耗设定限制。
     \item \textbf{设备信息查询}: 提供关于GPU型号、驱动程序版本、CUDA版本以及当前时钟速度的全面详细信息。这确保开发者和管理员拥有必要的数据来做出关于软件兼容性和性能调优的明智决策。
 \end{enumerate}
 
 \subsection{基础命令与输出解读}
 
-让我们从最简单的命令开始：\texttt{nvidia-smi}。通过执行这个简单命令，我们可以获得性能指标的全面概览。
+从最简单的命令开始：\texttt{nvidia-smi}。通过执行这个简单命令，我们可以获得性能指标的全面概览。
 输出包含两个主要表格。
 
 \subsection{第一个表格：性能概览}
@@ -41,7 +38,7 @@
     \item \textbf{GPU信息}: GPU名称（如 GeForce RTX 3090）、GPU ID（如 0）。
     \item \textbf{功耗与温度}: 当前功耗（如 31W）/ 最大功耗限制（如 350W）；当前温度（如 53°C）。
     \item \textbf{内存使用}: 已用显存 / 总显存（如 4000 MiB / 24 GiB）。
-    \item \textbf{GPU利用率}: 即使未运行自定义CUDA程序，若后台有录屏等应用调用GPU编码器，利用率也可能显示为 30\%-40\%。注意：\texttt{nvidia-smi} 的进程列表通常只显示CUDA计算进程，不一定显示文章编码/解码进程。
+    \item \textbf{GPU 利用率}: 即使未运行自定义 CUDA 程序，若后台有录屏等应用调用 GPU 编码器，利用率也可能显示为 30\%-40\%。注意：\texttt{nvidia-smi} 的进程列表通常只显示 CUDA 计算进程，不一定显示视频编码/解码进程。
 \end{itemize}
 
 \begin{figure}
@@ -148,8 +145,7 @@ sudo nvidia-smi -i 0 -pm 0
 \begin{lstlisting}
 nvidia-smi -q -d CLOCK
 \end{lstlisting}
-输出区分“当前时钟”与“最大时钟”。空闲时GPU会自动降频节能（如SM时钟从2100 MHz降至570MHz）；负载增加
-时自动升频（如升至1695 MHz）。
+输出区分“当前时钟”与“最大时钟”。空闲时 GPU 会自动降频节能（如 SM 时钟从 2100 MHz 降至 570 MHz）；负载增加时自动升频（如升至 1695 MHz）。
 
 \subsection{查询支持的时钟频率}
 
@@ -157,8 +153,7 @@ nvidia-smi -q -d CLOCK
 \begin{lstlisting}
 nvidia-smi -q -d SUPPORTED_CLOCKS
 \end{lstlisting}
-只能选择列表中存在的值（如内存 9501 MHz、5001 MHz；SM 12085 MHz、12070MHz等），不支
-持任意值。
+只能选择列表中存在的值（如内存 9501 MHz、5001 MHz；SM 12085 MHz、12070 MHz 等），不支持任意值。
 
 \subsection{设置应用时钟}
 
@@ -193,5 +188,4 @@ sudo nvidia-smi -i 0 -pmc
 nvidia-smi -h
 \end{lstlisting}
 
-\texttt{nvidia-smi} 是一个非常重要的命令。正如你将在接下来的文章中看到的，我们将使用\texttt{nvidia-smi} 
-来检查各种性能指标，验证优化效果，并诊断GPU运行状态。
+\texttt{nvidia-smi} 是一个非常重要的命令。在后续章节中，将使用 \texttt{nvidia-smi} 来检查各种性能指标，验证优化效果，并诊断 GPU 运行状态。

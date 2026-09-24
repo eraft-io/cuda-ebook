@@ -2,13 +2,12 @@
 
 \subsection{引言与回顾}
 
-在本节中，我们将讲解另一种优化向量规约（VectorReduction）应用的关键方法——\textbf
-{洗牌操作（ShuffleOperations）}。尽管此前我们提到过不再增加额外文章，但鉴于该主题对性能提升的重要性
-，特此补充本节内容。
+在本章中，将讲解另一种优化向量规约（Vector Reduction）应用的关键方法——\textbf
+{洗牌操作（Shuffle Operations）}。尽管此前已覆盖主要优化技术，但鉴于该主题对性能提升的重要性，特此补充本章内容。
 
-在之前的讨论中，我们利用\textbf{共享内存（SharedMemory）}实现了约10\%--15\%的性能提升。共
+在之前的讨论中，我们利用\textbf{共享内存（Shared Memory）}实现了约10\%--15\%的性能提升。共
 享内存之所以关键，是因为其访问速度远快于全局内存，且支持块内（Block-level）不同线程之间的通信。在规约操作中，
-由于同一元素可能被多次读取和计算，共享内存成为了必不可少的中间存储介质。结合循环展开（LoopUnrolling）技术，
+由于同一元素可能被多次读取和计算，共享内存成为了必不可少的中间存储介质。结合循环展开（Loop Unrolling）技术，
 我们取得了一定的优化效果。然而，为了追求极致性能，我们需要进一步探索更底层的硬件特性。
 
 \subsection{GPU内存层级与寄存器的局限性}
@@ -16,7 +15,7 @@
 \subsection{内存层级回顾}
 为了理解洗牌操作的必要性，首先回顾GPU的内存层级结构（按访问延迟从低到高排列）：
 \begin{enumerate}
-    \item \textbf{寄存器文件（Register File）}：位于流式多处理器（SM）内部，最靠近算术逻辑单元（ALU）。访问仅需几个时钟周期，是速度最快的存储单元。
+    \item \textbf{寄存器文件（Register File）}：位于SM内部，最靠近算术逻辑单元（ALU）。访问仅需几个时钟周期，是速度最快的存储单元。
     \item \textbf{一级缓存（L1 Cache）/ 共享内存（Shared Memory）}：位于SM内部，访问延迟约为几十个周期。共享内存是“每块（Per-Block）”资源，块内所有线程均可读写。
     \item \textbf{二级缓存（L2 Cache）}：在所有SM之间共享。
     \item \textbf{全局内存（Global Memory）}：访问延迟最高，通常在数百个周期以上。
@@ -36,7 +35,7 @@
 \subsection{洗牌操作（Shuffle Operations）原理}
 
 \subsection{基本概念}
-洗牌操作是一组用于在\textbf{线程束（Warp）}内直接交换变量的指令。根据CUDAC编程指南，主要有以下四种同步
+洗牌操作是一组用于在\textbf{线程束（Warp）}内直接交换变量的指令。根据 CUDA C 编程指南，主要有以下四种同步
 洗牌函数：
 \begin{itemize}
     \item \texttt{\_\_shfl\_sync(mask, var, srcLane)}：从指定通道（srcLane）直接复制数据。
@@ -136,12 +135,12 @@ __global__ void reduce_shuffle(int *g_idata, int *g_odata, unsigned int n) {
     \item \textbf{洗牌操作优化版}：执行时间约 \textbf{17--18 $\mu$s}。
 \end{itemize}
 
-\textbf{结论}：引入洗牌操作后，性能提升了约\textbf{4倍}。Nsight Compute分析显示，该优化
+\textbf{结论}：引入洗牌操作后，性能提升了约\textbf{4倍}。Nsight Compute 分析显示，该优化
 显著降低了L1/Shared Memory吞吐压力，并提高了计算单元的利用率。这是因为大量中间数据的交换直接在寄存器层面
 完成，避免了昂贵的内存读写操作。
 
 \subsection{总结}
 洗牌操作是CUDA高性能编程中至关重要的优化手段。通过将规约粒度下沉至Warp级别，并利用寄存器级数据交换替代共享内存通
 信，我们能够突破内存带宽瓶颈。尽管代码复杂度略有增加，但其带来的数倍性能收益使其成为向量规约等并行算法的标准优化范式。建
-议开发者在实际应用中，结合NsightCompute等工具深入分析内存访问模式，充分挖掘硬件潜力。
+议开发者在实际应用中，结合 Nsight Compute 等工具深入分析内存访问模式，充分挖掘硬件潜力。
 

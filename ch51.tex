@@ -3,7 +3,7 @@
 
 \subsection{概述}
 本章节详细讲解如何使用 \textbf
-{WMMA (Warp Matrix Multiply-Accumulate)API} 对 NVIDIA G PU 的张
+{WMMA (Warp Matrix Multiply-Accumulate) API} 对 NVIDIA GPU 的张
 量核心（Tensor Cores）进行编程。我们将通过一个 $1024\times 1024$ 方阵乘法的实际案例，演
 示从核函数编写、编译配置到性能对比的完整流程。
 
@@ -76,6 +76,6 @@ WMMA API（张量核心） & 388 $\mu$s & $\approx$ 6.5x \\
 \noindent \textbf{结论}：仅通过使用 WMMA API 调用张量核心，相较于无优化的朴素版本，性能提升约 \textbf{6.5倍}（节省约 85\% 的执行时间）。建议进一步将 WMMA 版本与共享内存优化版本进行对比，以全面评估不同优化策略的收益。
 
 \subsection{总结与展望}
-本节完整展示了 WMMA API 的基本用法及编译要求。张量核心编程不仅适用于矩阵乘法，还可扩展至cuBLAS、cuDNN 等库的底层加速。掌握架构感知的编译习惯与性能度量方法，是进行高效 GPU 并行编程的基础。
+本章完整展示了 WMMA API 的基本用法及编译要求。张量核心编程不仅适用于矩阵乘法，还可扩展至cuBLAS、cuDNN 等库的底层加速。掌握架构感知的编译习惯与性能度量方法，是进行高效 GPU 并行编程的基础。
 
 

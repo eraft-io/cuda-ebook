@@ -1,7 +1,7 @@
 \section{CUDA GPU并行编程：使用WMMA API编程张量核心}
 
 \subsection{引言}
-本节文章将深入讲解专用于张量核心（Tensor Cores）编程的 \textbf{WMMA API}（WarpMatrix Multiply-Accumulate）。在正式介绍API之前，我们首先回顾GPU执行矩阵乘法的四个通用步骤，以便
+本章将深入讲解专用于张量核心（Tensor Cores）编程的 \textbf{WMMA API}（Warp Matrix Multiply-Accumulate）。在正式介绍API之前，我们首先回顾GPU执行矩阵乘法的四个通用步骤，以便
 理解WMMA如何映射到这些基础操作中。
 
 \subsection{矩阵乘法的核心步骤回顾}
@@ -15,7 +15,7 @@
 
 \subsection{WMMA API 核心概念}
 \subsection{定义与适用架构}
-WMMA 全称为 \textbf{Warp Synchronous MatrixMultiply-Accumulate}。
+WMMA 全称为 \textbf{Warp Synchronous Matrix Multiply-Accumulate}。
 与普通CUDA核心以线程块（Thread Block）为调度单位不同，WMMA是以 \textbf{Warp（线程束）} 为基本执行单元的矩阵运算接口。
 
 \begin{itemize}
@@ -64,7 +64,7 @@ wmma::store_matrix_sync(ptr_c, frag_c, ldc, wmma::mem_row_major);
 
 \subsection{Warp ID 的计算方法}
 CUDA 提供了 \texttt{threadIdx} 和\texttt{blockIdx}，但\textbf{没有}预
-定义的 \texttt{warpId} 变量。在使用WMMA 时，必须手动计算当前线程所属的 Warp ID。
+定义的 \texttt{warpId} 变量。在使用 WMMA 时，必须手动计算当前线程所属的 Warp ID。
 
 \subsection{一维网格/线程块}
 若线程块为一维组织，Warp ID 计算公式为：

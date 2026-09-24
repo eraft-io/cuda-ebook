@@ -59,7 +59,7 @@ sdata[tid] = val + val2;
 跃线程属于同一Warp，硬件保证SIMT锁步执行，\textbf{无需显式同步}。利用此特性可将最后5次迭代（stride=16,8,4,2,1）展开为无同步的顺序代码。
 
 \subsection{设备函数封装}
-使用\verb|__device__|函数封装尾部展开逻辑，由主Kernel在stride<32时调用：
+使用\verb|__device__|函数封装尾部展开逻辑，由主核函数在 stride<32 时调用：
 \begin{lstlisting}[caption={Warp级循环展开设备函数}]
 __device__ void warpReduce(volatile float* sdata, int tid) {
     // Warp内32线程锁步执行，无需__syncthreads()
@@ -89,7 +89,7 @@ __device__ void warpReduce(volatile float* sdata, int tid) {
 \noindent \textbf{重要提醒}：最优块大小高度依赖GPU架构、问题规模及访存模式，必须通过Profiling驱动的实验确定，不可盲目套用经验值。
 
 \subsection{总结与进阶方向}
-本节验证了以下核心结论：
+本章验证了以下核心结论：
 \begin{enumerate}
     \item 共享内存本身不是银弹，必须与算法重构结合才能体现价值；
     \item 循环展开通过消除Warp级冗余同步获得稳定收益；

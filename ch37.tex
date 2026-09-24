@@ -1,21 +1,18 @@
-\section{CUDA GPU并行编程：仅使用全局内存的向量归约}
+\section{CUDA GPU 并行编程：仅使用全局内存的向量归约}
 
 
 
 \subsection{课程引言与重要性}
-本文章是向量归约（VectorReduction）系列的第一部分。向量归约不仅是独立的应用程序，更是理解GPU优化技术的
-基石。许多复杂应用（如矩阵乘法）内部都包含规约操作。掌握本节内容对于理解后续的优化策略至关重要。
+本章是向量归约（Vector Reduction）系列的第一部分。向量归约不仅是独立的应用程序，更是理解 GPU 优化技术的基石。许多复杂应用（如矩阵乘法）内部都包含规约操作。掌握本章内容对于理解后续的优化策略至关重要。
 
 \begin{tcolorbox}[colback=blue!5!white,colframe=blue!75!black,title=前置知识回顾]
-在之前的\textbf{向量加法}中，我们将向量A与B对应元素相加存入C，线程数等于元素数，每个线程独立处理一个索引。作
-为练习，你可以尝试用一半的线程实现向量加法（即每个线程处理两个元素）。但本节课的重点是\textbf{向量归约}，其复杂
-度远高于向量加法。
+在之前的 \textbf{向量加法} 中，将向量 A 与 B 对应元素相加存入 C，线程数等于元素数，每个线程独立处理一个索引。作为练习，可以尝试用一半的线程实现向量加法（即每个线程处理两个元素）。但本章的重点是 \textbf{向量归约}，其复杂度远高于向量加法。
 \end{tcolorbox}
 
 \subsection{向量归约的核心概念}
 
 \subsection{什么是向量归约}
-向量归约是指将单个输入向量（InputVector）中的所有元素累加，并将最终总和存储在特定位置（通常是索引0处）的过程。
+向量归约是指将单个输入向量（Input Vector）中的所有元素累加，并将最终总和存储在特定位置（通常是索引 0 处）的过程。
 
 \begin{itemize}
     \item \textbf{输入}：一个包含 $N$ 个元素的向量，例如 $\{v_0, v_1, \dots, v_{15}\}$。
@@ -26,37 +23,35 @@
 \subsection{基于树的归约方法（Tree-based Approach）}
 归约过程呈现树状分支结构，每一步都将待处理元素数量减半：
 \begin{enumerate}
-    \item \textbf{第一阶段}：16个元素 $\to$ 8个有效结果。
-    \item \textbf{第二阶段}：8个有效结果 $\to$ 4个有效结果。
-    \item \textbf{第三阶段}：4个有效结果 $\to$ 2个有效结果。
-    \item \textbf{最终阶段}：2个有效结果 $\to$ 1个最终总和。
+    \item \textbf{第一阶段}：16 个元素 $\to$ 8 个有效结果。
+    \item \textbf{第二阶段}：8 个有效结果 $\to$ 4 个有效结果。
+    \item \textbf{第三阶段}：4 个有效结果 $\to$ 2 个有效结果。
+    \item \textbf{最终阶段}：2 个有效结果 $\to$ 1 个最终总和。
 \end{enumerate}
 这种逐步减少活跃线程和数据量的过程被称为“规约”（Reduction）。
 
-\subsection{单Block内的归约逻辑推导}
+\subsection{单 Block 内的归约逻辑推导}
 
 \subsection{第一步：相邻元素相加}
-假设向量有16个元素，启动16个线程（Block Size = 16）。
+假设向量有 16 个元素，启动 16 个线程（Block Size = 16）。
 \begin{itemize}
-    \item \textbf{线程0}：执行 $input[0] += input[1]$
-    \item \textbf{线程2}：执行 $input[2] += input[3]$
-    \item \textbf{线程4}：执行 $input[4] += input[5]$
+    \item \textbf{线程 0}：执行 $input[0] += input[1]$
+    \item \textbf{线程 2}：执行 $input[2] += input[3]$
+    \item \textbf{线程 4}：执行 $input[4] += input[5]$
     \item \dots 以此类推
 \end{itemize}
-\textbf{关键观察}：只有偶数ID的线程（0, 2, 4...）在工作，奇数ID线程（1, 3, 5...）处于空
-闲状态。虽然这看似浪费资源，但这是为了统一代码逻辑以支持后续步骤所必须的代价。
+\textbf{关键观察}：只有偶数 ID 的线程（0, 2, 4...）在工作，奇数 ID 线程（1, 3, 5...）处于空闲状态。虽然这看似浪费资源，但这是为了统一代码逻辑以支持后续步骤所必须的代价。
 
 \subsection{为什么需要重复执行？}
-第一步结束后，我们只得到了相邻两元素的和，并未得到全向量和。必须对新生成的值重复执行相同的加法逻辑，但每次参与的线程数和
-操作的元素间距都会变化。
+第一步结束后，只得到了相邻两元素的和，并未得到全向量和。必须对新生成的值重复执行相同的加法逻辑，但每次参与的线程数和操作的元素间距都会变化。
 
 \subsection{步幅（Stride）的概念}
 步幅是指当前步骤中，参与运算的两个元素之间的索引距离。
 \begin{itemize}
-    \item \textbf{第1步}：线程0处理索引0和1，距离为 $1-0=1$，故 $stride=1$。
-    \item \textbf{第2步}：线程0处理索引0和2（因为索引1已在第1步被累加到0中），距离为 $2-0=2$，故 $stride=2$。
-    \item \textbf{第3步}：线程0处理索引0和4，距离为 $4-0=4$，故 $stride=4$。
-    \item \textbf{规律}：$stride$ 从1开始，每步乘以2（$1 \to 2 \to 4 \to 8 \dots$）。
+    \item \textbf{第 1 步}：线程0处理索引0和1，距离为 $1-0=1$，故 $stride=1$。
+    \item \textbf{第 2 步}：线程 0 处理索引 0 和 2（因为索引 1 已在第 1 步被累加到 0 中），距离为 $2-0=2$，故 $stride=2$。
+    \item \textbf{第 3 步}：线程 0 处理索引 0 和 4，距离为 $4-0=4$，故 $stride=4$。
+    \item \textbf{规律}：$stride$ 从 1 开始，每步乘以 2（$1 \to 2 \to 4 \to 8 \dots$）。
 \end{itemize}
 
 \subsection{代码实现与过滤器设计}
@@ -95,7 +90,7 @@ if (tid % (2 * stride) == 0)
 \end{itemize}
 
 \subsection{完整的循环结构}
-结合上述分析，单Block内的归约Kernel核心逻辑如下：
+结合上述分析，单 Block 内的归约核函数核心逻辑如下：
 \begin{lstlisting}[caption={带过滤器的归约循环}]
 // tid 为线程在Block内的局部IDfor (unsigned int stride = 1; stride < blockDim.x; stride *= 2) {
     // 双重过滤：步幅对齐 + 边界安全
@@ -112,44 +107,42 @@ if (tid % (2 * stride) == 0)
 入操作后，才进入下一步幅的计算。如果没有同步，某些线程可能会在邻居线程尚未更新数据时就读取旧值，导致计算结果完全错误。
 \end{tcolorbox}
 
-\subsection{多Block归约与全局同步挑战}
+\subsection{多 Block 归约与全局同步挑战}
 
 \subsection{部分和（Partial Sums）}
-当向量大小超过单个Block的处理能力时，需将向量切分为多个片段，每个Block处理一个片段。每个Block归约后得到的
-结果称为“部分和”（PartialSum）。例如：
+当向量大小超过单个 Block 的处理能力时，需将向量切分为多个片段，每个 Block 处理一个片段。每个 Block 归约后得到的结果称为“部分和”（Partial Sum）。例如：
 \begin{itemize}
-    \item Block 0 处理前8个元素 $\to$ 部分和 $S_0$
-    \item Block 1 处理后8个元素 $\to$ 部分和 $S_1$
+    \item Block 0 处理前 8 个元素 $\to$ 部分和 $S_0$
+    \item Block 1 处理后 8 个元素 $\to$ 部分和 $S_1$
 \end{itemize}
 
-\subsection{CUDA的同步限制}
-\textbf{CUDA不支持跨Block的全局同步。} 我们无法在一个Kernel内部让所有Block停下来等待彼此完
-成。这是因为GPU硬件调度器可能不会同时调度所有Block，强制全局同步会导致死锁或巨大的性能开销。
+\subsection{CUDA 的同步限制}
+\textbf{CUDA 不支持跨 Block 的全局同步。} 无法在一个核函数内部让所有 Block 停下来等待彼此完成。这是因为 GPU 硬件调度器可能不会同时调度所有 Block，强制全局同步会导致死锁或巨大的性能开销。
 
-\subsection{解决方案：多Kernel策略}
-利用Kernel启动之间的隐式全局同步机制：
+\subsection{解决方案：多核函数策略}
+利用核函数启动之间的隐式全局同步机制：
 \begin{enumerate}
-    \item \textbf{Kernel 1}：启动多个Block，每个Block独立计算一段数据的部分和。
-    \item \textbf{Host端同步}：CPU等待Kernel 1完全执行完毕（此时所有部分和已安全写入全局内存）。
-    \item \textbf{数据重排}：将分散在各Block起始位置的部分和收集到连续内存区域。
-    \item \textbf{Kernel 2}：启动新Kernel（通常只需1个Block），对部分和向量进行最终归约。
+    \item \textbf{核函数 1}：启动多个 Block，每个 Block 独立计算一段数据的部分和。
+    \item \textbf{Host 端同步}：CPU 等待核函数 1 完全执行完毕（此时所有部分和已安全写入全局内存）。
+    \item \textbf{数据重排}：将分散在各 Block 起始位置的部分和收集到连续内存区域。
+    \item \textbf{核函数 2}：启动新核函数（通常只需 1 个 Block），对部分和向量进行最终归约。
 \end{enumerate}
 
 \subsection{部分和的收集代码}
-在Kernel 1的末尾，需要将本Block的部分和移动到输入向量的前端，以便Kernel 2能连续读取：
+在核函数 1 的末尾，需要将本 Block 的部分和移动到输入向量的前端，以便核函数 2 能连续读取：
 \begin{lstlisting}
 // 仅由Block内的0号线程执行
 if (tid == 0) {
-    // 将本Block归约结果（位于blockIdx.x * blockDim.x）
+    // 将本 Block 归约结果（位于 blockIdx.x * blockDim.x）
     // 移动到向量的第 blockIdx.x 个位置
     input[blockIdx.x] = input[blockIdx.x * blockDim.x];
 }
 \end{lstlisting}
-\textbf{注意}：Kernel 2处理的元素数量等于Kernel 1启动的Block数量，而非原始向量大小。
+\textbf{注意}：核函数 2 处理的元素数量等于核函数 1 启动的 Block 数量，而非原始向量大小。
 
-\subsection{完整GPU Kernel代码}
+\subsection{完整 GPU 核函数代码}
 
-\begin{lstlisting}[caption={仅使用全局内存的向量归约完整Kernel}]
+\begin{lstlisting}[caption={仅使用全局内存的向量归约完整核函数}]
 __global__ void reduce_in_place(float* input, int n) {
     unsigned int tid = threadIdx.x;
     unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -173,9 +166,9 @@ __global__ void reduce_in_place(float* input, int n) {
 
 \subsection{总结与后续展望}
 \begin{itemize}
-    \item \textbf{本课重点}：理解了归约的树形结构、步幅变化规律、双重过滤器的必要性、块内同步的作用，以及多Block场景下的全局同步解决方案。
+    \item \textbf{本章重点}：理解了归约的树形结构、步幅变化规律、双重过滤器的必要性、块内同步的作用，以及多Block场景下的全局同步解决方案。
     \item \textbf{性能局限}：本版本仅使用全局内存，存在严重的非合并访问（Non-coalesced Access）和高延迟问题。每一步都在读写全局内存，效率极低。
-    \item \textbf{未来优化}：下一讲将引入\textbf{共享内存（Shared Memory）}来减少全局内存访问，随后还会讲解\textbf{Warp Shuffle}指令、原子操作及更高级的归约模式。
-    \item \textbf{学习建议}：如果第一次未能完全理解，请重新观看文章并手动推演16个元素的归约过程。理解索引映射是本节最大的难点，也是最重要的收获。
+    \item \textbf{未来优化}：下一章将引入 \textbf{共享内存（Shared Memory）} 来减少全局内存访问，随后还会讲解 \textbf{Warp Shuffle} 指令、原子操作及更高级的归约模式。
+    \item \textbf{学习建议}：如果第一次未能完全理解，请重新阅读本章并手动推演 16 个元素的归约过程。理解索引映射是本节最大的难点，也是最重要的收获。
 \end{itemize}
 

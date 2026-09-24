@@ -2,7 +2,7 @@
 
 \subsection{引言：性能评估的核心目标}
 
-本节文章将深入讲解\textbf{屋顶线模型（RooflineModel）}。这是GPU高性能计算中至关重要的性能分析工
+本章将深入讲解\textbf{屋顶线模型（Roofline Model）}。这是GPU高性能计算中至关重要的性能分析工
 具，其核心目的在于：
 \begin{enumerate}
     \item 科学评估应用程序的性能瓶颈；
@@ -11,7 +11,7 @@
 \end{enumerate}
 
 在进行屋顶线分析之前，建议先掌握GPU硬件架构参数（如总线速度、显存带宽、指令吞吐量等）的基础知识。只有理解了这些底层指
-标，才能准确解读分析结果。例如，在之前的向量规约（VectorReduction）案例中，我们采用了共享内存、合并访问和
+标，才能准确解读分析结果。例如，在之前的向量规约（Vector Reduction）案例中，我们采用了共享内存、合并访问和
 Shuffle操作等优化手段，正是因为通过屋顶线分析确认了该应用是典型的\textit{内存受限}应用。
 
 \subsection{关键性能指标与算术强度}
@@ -42,7 +42,7 @@ Shuffle操作等优化手段，正是因为通过屋顶线分析确认了该应�
 \end{itemize}
 
 \subsection{可达性能公式}
-应用程序的可达性能（AttainablePerformance）受限于硬件峰值和当前算术强度下的带宽上限，取二者最小值：
+应用程序的可达性能（Attainable Performance）受限于硬件峰值和当前算术强度下的带宽上限，取二者最小值：
 \begin{equation}
     \text{Performance} = \min \left( \text{Peak Compute}
 ,\ \quad \text{AI} \times \text{Peak Bandwidth} \right)

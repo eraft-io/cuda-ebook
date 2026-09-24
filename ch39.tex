@@ -1,8 +1,7 @@
-\section{CUDA GPU并行编程：向量归约优化}
+\section{CUDA GPU 并行编程：向量归约优化}
 
 \subsection{引言：自动化多级归约}
-在上一讲中，我们手动编写了三级 Kernel 启动代码来处理不同规模的部分和。为了提升代码的通用性，我们首先将其重构
-为\textbf{While 循环}结构，使其能自动适应任意大小的输入向量。
+在上一章中，手动编写了三级核函数启动代码来处理不同规模的部分和。为了提升代码的通用性，首先将其重构为 \textbf{While 循环} 结构，使其能自动适应任意大小的输入向量。
 
 \begin{lstlisting}[caption={自动化多级归约 Host 端逻辑}]
 int n = N; // 初始元素数量
@@ -26,7 +25,7 @@ cudaDeviceSynchronize();
 \subsection{核心优化：移除取模过滤器}
 
 \subsection{原始代码的性能瓶颈}
-在基础版归约 Kernel 中，我们通过取模运算来筛选活跃线程：
+在基础版归约核函数中，通过取模运算来筛选活跃线程：
 \begin{lstlisting}
 // 原始写法：仅允许满足步幅倍数的线程执行
 if ((tid % (2 * stride) == 0) && (tid + stride < blockDim.x)) {
@@ -54,8 +53,8 @@ if (tid + stride < blockDim.x) {
 
 \textbf{为什么这不会破坏计算结果？}
 \begin{enumerate}
-    \item 以 $stride=1$ 为例：线程1 执行 $input[1] += input[2]$，将位置1的值修改为 $v_1+v_2$。
-    \item 但在下一步 $stride=2$ 时，只有线程0、2、4... 参与计算。线程0 读取的是 $input[0]$ 和 $input[2]$。
+    \item 以 $stride=1$ 为例：线程 1 执行 $input[1] += input[2]$，将位置 1 的值修改为 $v_1+v_2$。
+    \item 但在下一步 $stride=2$ 时，只有线程 0、2、4... 参与计算。线程 0 读取的是 $input[0]$ 和 $input[2]$。
     \item \textbf{关键点}：位置1 的值虽然在 $stride=1$ 时被“错误”修改了，但在后续所有步骤中\textbf{永远不会被再次读取}。
     \item 因此，这些“冗余计算”虽然浪费了少量算力，但完全不影响最终归约结果的正确性。
 \end{enumerate}
@@ -96,14 +95,14 @@ if (tid + stride < blockDim.x) {
     \item \textbf{所有} $input[0..31]$ 的值均被修改。
     \item 例如 $input[1] = v_1 + v_2$（而非原始的 $v_1$）。
 \end{itemize}
-尽管内存模式不同，但由于后续步骤的访问模式（由 $stride$ 决定）天然跳过了这些被“污染”的位置，最终$input[0]$ 中的归约结果与基准版本\textbf{完全一致}（浮点精度误差范围内）。
+尽管内存模式不同，但由于后续步骤的访问模式（由 $stride$ 决定）天然跳过了这些被“污染”的位置，最终 $input[0]$ 中的归约结果与基准版本 \textbf{完全一致}（浮点精度误差范围内）。
 
 \subsection{总结与最佳实践}
 
 \begin{enumerate}
-    \item \textbf{避免在热路径中使用取模/除法}：在 GPU 内核的紧密循环中，应尽可能用位运算（如 \lstinline{&} 代替 \lstinline{\%}）或通过算法重构（如本节所示）来消除这些高延迟指令。
+    \item \textbf{避免在热路径中使用取模/除法}：在 GPU 核函数的紧密循环中，应尽可能用位运算（如 \lstinline{&} 代替 \lstinline{\%}）或通过算法重构（如本章所示）来消除这些高延迟指令。
     \item \textbf{冗余计算 vs 分支开销}：在 GPU 上，让所有线程执行统一的简单操作，往往比通过复杂条件判断让部分线程空闲更高效。“做无用功”有时比“停下来思考要不要做功”更快。
     \item \textbf{验证手段}：性能优化必须伴随正确性验证。建议同时使用 Nsight Compute（看性能指标）和 CUDA-GDB/VS Debugger（看内存数值）进行双重确认。
-    \item \textbf{后续方向}：当前版本仍受限于全局内存带宽和非合并访问。下一讲将引入 \textbf{共享内存（Shared Memory）} 进一步优化访存模式。
+    \item \textbf{后续方向}：当前版本仍受限于全局内存带宽和非合并访问。下一章将引入 \textbf{共享内存（Shared Memory）} 进一步优化访存模式。
 \end{enumerate}
 

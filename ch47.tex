@@ -2,8 +2,8 @@
 
 \subsection{引言}
 
-在矩阵乘法的GPU优化中，\textbf{分块（Tiling）}是提升性能的核心技术。本节将深入探讨如何为矩阵乘法应用选
-择最佳的分块策略，重点分析矩阵尺寸、流式多处理器（SM）数量与分块尺寸三者之间的制约关系，特别是针对非方阵的处理方法。
+在矩阵乘法的GPU优化中，\textbf{分块（Tiling）}是提升性能的核心技术。本章将深入探讨如何为矩阵乘法应用选
+择最佳的分块策略，重点分析矩阵尺寸、SM 数量与分块尺寸三者之间的制约关系，特别是针对非方阵的处理方法。
 
 \subsection{关键参数与约束}
 
@@ -75,7 +75,7 @@
 
 \subsection{总结与展望}
 
-本节明确了分块策略选择的黄金法则：
+本章明确了分块策略选择的黄金法则：
 \begin{center}
     \fbox{\parbox{0.9\textwidth}{\centering
         \textbf{最优分块} $\Longleftrightarrow$
@@ -86,7 +86,7 @@
     }}
 \end{center}
 
-下一节将转向 \textbf{Tensor Cores（张量核心）}。在Ampere及更新架构中，TensorCore执
-行矩阵乘法的性能可达普通CUDA Core的\textbf{9倍以上}，已成为现代深度学习与高性能计算中GEMM操作的唯
-一推荐路径。理解普通核心的分块原理，是掌握TensorCore编程的重要基础。
+下一章将转向 \textbf{Tensor Cores（张量核心）}。在Ampere及更新架构中，Tensor Core 执
+行矩阵乘法的性能可达普通 CUDA Core 的\textbf{9倍以上}，已成为现代深度学习与高性能计算中GEMM操作的唯
+一推荐路径。理解普通核心的分块原理，是掌握 Tensor Core 编程的重要基础。
 

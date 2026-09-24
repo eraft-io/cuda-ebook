@@ -2,7 +2,7 @@
 
 \subsection{引言：矩阵乘法的重要性}
 
-矩阵乘法（GEMM, General MatrixMultiply）是计算科学与工程领域的基石操作。无论是在大规模仿真、
+矩阵乘法（GEMM, General Matrix Multiply）是计算科学与工程领域的基石操作。无论是在大规模仿真、
 优化问题，还是在当今热门的机器学习与人工智能领域，矩阵乘法都扮演着核心角色。
 
 \begin{itemize}
@@ -91,7 +91,7 @@ __global__ void matmul_naive(float* A, float* B, float* C, int N) {
 
 \subsection{总结与展望}
 
-本节实现了矩阵乘法的朴素CUDA版本，建立了性能基准。尽管该实现逻辑简单，但效率较低。下一节将介绍\textbf
-{分块（Tiling）技术}与\textbf{共享内存（SharedMemory）}的使用，这是优化GEMM 性能的核心
+本章实现了矩阵乘法的朴素 CUDA 版本，建立了性能基准。尽管该实现逻辑简单，但效率较低。下一章将介绍\textbf
+{分块（Tiling）技术}与\textbf{共享内存（Shared Memory）}的使用，这是优化GEMM 性能的核心
 手段，也是所有高性能矩阵乘法库的基础。
 

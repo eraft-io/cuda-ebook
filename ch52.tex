@@ -1,12 +1,12 @@
 \section{CUDA GPU并行编程：使用cuBLAS库调用张量核心}
 \subsection{概述：cuBLAS 与 WMMA API 的区别}
 
-本节文章主要讨论 \textbf{cuBLAS} 库及其在张量核心（TensorCore）矩阵乘法编程中的应用。cuBLAS 是一个高度优化的线性代数库，其功能与前两节文章中介绍的 WMMA API类似，但二者存在本质区别：
+本章主要讨论 \textbf{cuBLAS} 库及其在张量核心（Tensor Core）矩阵乘法编程中的应用。cuBLAS 是一个高度优化的线性代数库，其功能与前两章中介绍的 WMMA API 类似，但二者存在本质区别：
 
 
 \begin{itemize}
-    \item \textbf{WMMA API}：需要开发者手动编写 GPU Kernel，自行管理数据从全局内存到寄存器的加载、MMA Sync 指令调用以及结果存储等底层细节，具有高度可定制性。
-    \item \textbf{cuBLAS}：是\textbf{不可定制}的封装库。开发者无需编写矩阵乘法的 GPU Kernel，只需配置规格参数并调用库函数即可。NVIDIA 已在库内部实现了针对张量核心的深度优化。
+    \item \textbf{WMMA API}：需要开发者手动编写 GPU 核函数，自行管理数据从全局内存到寄存器的加载、MMA Sync 指令调用以及结果存储等底层细节，具有高度可定制性。
+    \item \textbf{cuBLAS}：是\textbf{不可定制}的封装库。开发者无需编写矩阵乘法的 GPU 核函数，只需配置规格参数并调用库函数即可。NVIDIA 已在库内部实现了针对张量核心的深度优化。
 \end{itemize}
 
 \subsection{环境配置与安装}
@@ -76,7 +76,7 @@ cublasGemmEx(handle,
 
 \subsection{Makefile 编译配置}
 建议使用 Makefile 简化编译流程。编译 cuBLAS 程序时，除常规优化标志外，\textbf
-{必须链接cublas 库}：
+{必须链接 cuBLAS 库}：
 
 \begin{lstlisting}
 # 通用编译标志
@@ -98,12 +98,12 @@ cublas: cublas.cu
     \item \textbf{cuBLAS (Tensor Core)}：约 107 $\mu s$
 \end{itemize}
 
-\textbf{结论}：cuBLAS 提供了远超手写 WMMA Kernel 的性能。这得益于 NVIDIA 对库内核函
+\textbf{结论}：cuBLAS 提供了远超手写 WMMA 核函数的性能。这得益于 NVIDIA 对库内核函
 数的极致优化（包括寄存器分块、流水线调度等）。对于生产环境中的矩阵乘法需求，强烈建议优先使用 cuBLAS 而非自行实现
 。
 
 \subsection{学习建议}
-本文章仅作为入门引导。cuBLAS 提供了丰富的 API 变体（如 \texttt{cublasSgemm}
+本章仅作为入门引导。cuBLAS 提供了丰富的 API 变体（如 \texttt{cublasSgemm}
 ,\texttt{cublasDgemm}, \texttt{cublasHgemm} 等），建议课后深入查阅
 \href{https://docs.nvidia.com/cuda/cublas/}{NVIDIA cuBLAS 官方文档}，以掌握不同精度、布局及批处理操作的详细用法。同时，建议学习 Makefile 的基本语法，以提升 CUDA项目的构建效率。
  

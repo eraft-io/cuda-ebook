@@ -1,8 +1,7 @@
-\section{CUDA GPU并行编程：向量归约代码解析与性能剖析}
+\section{CUDA GPU 并行编程：向量归约代码解析与性能剖析}
 
 \subsection{引言：CPU基准验证}
-在编写和测试GPU核函数（Kernel）时，验证其输出的正确性是第一步。由于CPU串行代码逻辑简单且结果确定，我们通常先
-编写一个CPU版本的向量归约函数，将其输出作为“GroundTruth（基准真值）”，以此来校验GPU核函数的计算结果。
+在编写和测试 GPU 核函数（Kernel）时，验证其输出的正确性是第一步。由于 CPU 串行代码逻辑简单且结果确定，通常先编写一个 CPU 版本的向量归约函数，将其输出作为“Ground Truth（基准真值）”，以此来校验 GPU 核函数的计算结果。
 
 \begin{lstlisting}[caption={CPU端向量归约基准函数}]
 float cpu_reduce(const float* input, int n) {
@@ -15,11 +14,11 @@ float cpu_reduce(const float* input, int n) {
 \end{lstlisting}
 
 \subsection{CUDA 主函数（Host端）完整实现}
-一个标准的CUDA应用程序通常包含以下七个核心步骤：分配内存、初始化数据、主机到设备的数据拷贝（H2D）、配置并启动Kernel、设备同步、设备到主机的数据拷贝（D2H）、释放内存。
+一个标准的 CUDA 应用程序通常包含以下七个核心步骤：分配内存、初始化数据、主机到设备的数据拷贝（H2D）、配置并启动核函数、设备同步、设备到主机的数据拷贝（D2H）、释放内存。
 
 
 \subsection{内存分配与初始化}
-假设向量大小 $N = 1024 \times 1024$（约100万元素）。
+假设向量大小 $N = 1024 \times 1024$（约 100 万元素）。
 \begin{itemize}
     \item \textbf{主机端（CPU）}：使用 \lstinline{new} 或 \lstinline{malloc} 分配内存。
     \item \textbf{设备端（GPU）}：使用 \lstinline{cudaMalloc} 分配全局内存。注意计算大小时需乘以 \lstinline{sizeof(float)}。
@@ -44,7 +43,7 @@ cudaMemcpy(d_input, h_input, size, cudaMemcpyHostToDevice);
 \end{lstlisting}
 
 \subsection{网格与线程块配置（Grid/Block Sizing）}
-为了保证所有元素都被处理，且网格大小（Grid Size）为整数，我们使用标准的向上取整公式：
+为了保证所有元素都被处理，且网格大小（Grid Size）为整数，使用标准的向上取整公式：
 \begin{equation}
     \text{gridSize} = \frac{N + \text{blockSize} -1}
 {\text{blockSize}}
@@ -52,18 +51,17 @@ cudaMemcpy(d_input, h_input, size, cudaMemcpyHostToDevice);
 假设 \lstinline{blockSize = 256}，则 \lstinline
 {gridSize =(1048576 + 255) / 256 = 4096}。
 
-\subsection{多级Kernel启动（层级归约）}
-由于CUDA不支持跨Block的全局同步，当向量极大时，单次Kernel无法将所有元素归约为1个值。我们需要采
-用\textbf{多级Kernel启动}策略，将上一次Kernel输出的“部分和（PartialSums）”作为下一次Ker nel的输入。
+\subsection{多级核函数启动（层级归约）}
+由于 CUDA 不支持跨 Block 的全局同步，当向量极大时，单次核函数无法将所有元素归约为 1 个值。需要采用 \textbf{多级核函数启动} 策略，将上一次核函数输出的“部分和（Partial Sums）”作为下一次核函数的输入。
 
 
 \begin{enumerate}
-    \item \textbf{第一级 Kernel}：处理 $1,048,576$ 个元素，启动 $4096$ 个Block。输出 $4096$ 个部分和。
-    \item \textbf{第二级 Kernel}：处理 $4096$ 个部分和，启动 $16$ 个Block（$4096/256$）。输出 $16$ 个部分和。
-    \item \textbf{第三级 Kernel}：处理 $16$ 个部分和，启动 $1$ 个Block。输出 $1$ 个最终总和。
+    \item \textbf{第一级核函数}：处理 $1,048,576$ 个元素，启动 $4096$ 个 Block。输出 $4096$ 个部分和。
+    \item \textbf{第二级核函数}：处理 $4096$ 个部分和，启动 $16$ 个 Block（$4096/256$）。输出 $16$ 个部分和。
+    \item \textbf{第三级核函数}：处理 $16$ 个部分和，启动 $1$ 个 Block。输出 $1$ 个最终总和。
 \end{enumerate}
 
-\begin{lstlisting}[caption={多级Kernel启动与同步}]
+\begin{lstlisting}[caption={多级核函数启动与同步}]
 int blockSize = 256;
 
 // --- 第一级归约 ---
@@ -85,7 +83,7 @@ cudaDeviceSynchronize();
 \end{lstlisting}
 
 \subsection{结果回传、验证与资源释放}
-最终结果存储在 \lstinline{d_input[0]} 中。我们只需将这4个字节（1个float）拷回主机。
+最终结果存储在 \lstinline{d_input[0]} 中。只需将这 4 个字节（1 个 float）拷回主机。
 
 \begin{lstlisting}[caption={结果回传与内存释放}]
 // 仅拷贝第一个元素（最终结果）回主机
@@ -100,39 +98,38 @@ delete[] h_input;
 \end{lstlisting}
 
 \begin{tcolorbox}[colback=yellow!5!white,colframe=yellow!75!black,title=浮点精度差异说明]
-运行结果可能会显示 GPU 输出（如 5.49...e11）与 CPU输出在最低有效位上存在微小差异。这是因为浮点数加法
-不满足结合律，且 GPU 和 CPU的累加顺序、硬件舍入模式不同。若需完全一致，可将数据类型改为 \lstinline
-{double}，或使用 C++模板（Templates）来统一管理数据类型。
+运行结果可能会显示 GPU 输出（如 5.49...e11）与 CPU 输出在最低有效位上存在微小差异。这是因为浮点数加法
+不满足结合律，且 GPU 和 CPU 的累加顺序、硬件舍入模式不同。若需完全一致，可将数据类型改为 \lstinline
+{double}，或使用 C++ 模板（Templates）来统一管理数据类型。
 \end{tcolorbox}
 
 \subsection{Nsight Compute 性能剖析 (Profiling)}
-代码跑通后，我们使用 NVIDIA Nsight Compute (NCU) 对应用程序进行性能分析，以寻找瓶颈。
+代码跑通后，使用 NVIDIA Nsight Compute（NCU）对应用程序进行性能分析，以寻找瓶颈。
 
-\subsection{Kernel 执行时间分析 (Duration)}
-在 NCU 的 Summary 页面，我们可以看到三个同名 Kernel 的执行时间：
+\subsection{核函数执行时间分析（Duration）}
+在 NCU 的 Summary 页面，可以看到三个同名核函数的执行时间：
 \begin{itemize}
-    \item \textbf{Kernel 1 (4096 Blocks)}: 约 284 $\mu s$。耗时最长，因为处理了100万个元素。
-    \item \textbf{Kernel 2 (16 Blocks)}: 约 15 $\mu s$。
-    \item \textbf{Kernel 3 (1 Block)}: 约 13 $\mu s$。
+    \item \textbf{核函数 1（4096 Blocks）}：约 284 $\mu s$。耗时最长，因为处理了 100 万个元素。
+    \item \textbf{核函数 2（16 Blocks）}：约 15 $\mu s$。
+    \item \textbf{核函数 3（1 Block）}：约 13 $\mu s$。
 \end{itemize}
 
 \subsection{SM 占用与波次 (Waves) 概念}
-GPU 的计算单元由多个流式多处理器（SM）组成。假设当前 GPU 有 38 个 SM：
+GPU 的计算单元由多个 SM 组成。假设当前 GPU 有 38 个 SM：
 \begin{itemize}
-    \item \textbf{Kernel 1}：4096 个 Block 分配给 38 个 SM。每个 SM 需要执行约 $4096 / 38 \approx 108$ 个 Block。这被称为\textbf{多波次（Multi-wave）}执行，SM 处于高负载状态。
-    \item \textbf{Kernel 2}：仅有 16 个 Block。这意味着只有 16 个 SM 各执行 1 个 Block，剩余 22 个 SM 完全闲置。这导致了严重的硬件利用率下降（Tail Effect / 尾部效应）。
+    \item \textbf{核函数 1}：4096 个 Block 分配给 38 个 SM。每个 SM 需要执行约 $4096 / 38 \approx 108$ 个 Block。这被称为 \textbf{多波次（Multi-wave）} 执行，SM 处于高负载状态。
+    \item \textbf{核函数 2}：仅有 16 个 Block。这意味着只有 16 个 SM 各执行 1 个 Block，剩余 22 个 SM 完全闲置。这导致了严重的硬件利用率下降（Tail Effect / 尾部效应）。
 \end{itemize}
 
 \subsection{计算与内存吞吐量}
 \begin{itemize}
     \item \textbf{SM 利用率 (Compute Throughput)}：Kernel 1 的计算利用率约为 74\%。
     \item \textbf{内存吞吐量 (Memory Throughput)}：仅为 9\% 左右。
-    \item \textbf{结论}：当前的基础版归约代码是\textbf{计算受限（Compute-bound）}或受限于指令开销，而非内存带宽受限。大量的线程同步（\lstinline{__syncthreads}）和条件分支（\lstinline{if} 过滤器）消耗了大量时钟周期。
+    \item \textbf{结论}：当前版本是 \textbf{计算受限（Compute-bound）}或受限于指令开销，而非内存带宽受限。大量的线程同步（\lstinline{__syncthreads}）和条件分支（\lstinline{if} 过滤器）消耗了大量时钟周期。
 \end{itemize}
 
 \subsection{缓存命中率 (Cache Hit Rate) 的对比}
-在之前的“向量加法”中，每个元素只被读取一次（Streaming），L1/L2 缓存命中率几乎为 0\%。但在“向量归约
-”中，数据存在强烈的\textbf{时间局部性（Temporal Locality）}：
+在之前的“向量加法”中，每个元素只被读取一次（Streaming），L1/L2 缓存命中率几乎为 0\%。但在“向量归约”中，数据存在强烈的 \textbf{时间局部性（Temporal Locality）}：
 \begin{itemize}
     \item 第 0 步：读取 index 0 和 1。
     \item 第 1 步：再次读取 index 0（此时包含 0+1 的结果）和 2。
@@ -140,8 +137,7 @@ GPU 的计算单元由多个流式多处理器（SM）组成。假设当前 GPU 
 \end{itemize}
 
 \subsection{总结与后续优化方向}
-本节课我们完成了向量归约的完整 Host/Device 代码编写，并学会了使用 Nsight Compute分析性能指标。
-当前的“仅使用全局内存+跨步访问”版本存在以下明显缺陷，将在后续课程中优化：
+本章完成了向量归约的完整 Host/Device 代码编写，并学会了使用 Nsight Compute 分析性能指标。当前的“仅使用全局内存 + 跨步访问”版本存在以下明显缺陷，将在后续章节中优化：
 \begin{enumerate}
     \item \textbf{非合并访存（Non-coalesced Access）}：随着 Stride 增大，相邻线程访问的内存地址跨度越来越大，导致内存事务（Memory Transactions）浪费。
     \item \textbf{线程发散（Thread Divergence）}：\lstinline{if (tid \% (2*stride) == 0)} 导致 Warp 内一半线程闲置，产生严重的分支发散。

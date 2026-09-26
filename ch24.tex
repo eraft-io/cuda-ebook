@@ -8,14 +8,142 @@
 
 理论占用率的计算方法是将核函数中使用的 Warp 数除以每个 SM（流式多处理器）所能容纳的最大 Warp 数。这里涉及两个关键值：分子根据应用程序中使用的 Warp 数而变化；分母对应 GPU 的 Warp 数限制，这个限制可以从 GPU 白皮书中获取，或者使用前文介绍的运行时 API 获取。
 
+\begin{lstlisting}
+
+colin@colin-BATTLE-AX-B860M-P-WIFI:~/cuda_ebook$ sudo /usr/local/cuda-13/bin/ncu ./vec_add
+==PROF== Connected to process 3036 (/home/colin/cuda_ebook/vec_add)
+==PROF== Profiling "vectorAdd" - 0: 0%....50%....100% - 9 passes
+COMPLETED SUCCESSFULLY
+==PROF== Disconnected from process 3036
+[3036] vec_add@127.0.0.1
+  vectorAdd(const int *, const int *, int *, int) (64, 1, 1)x(1024, 1, 1), Context 1, Stream 7, Device 0, CC 12.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz        13.45
+    SM Frequency                    Ghz         2.40
+    Elapsed Cycles                cycle        5,931
+    Memory Throughput                 %        24.84
+    DRAM Throughput                   %        24.84
+    Duration                         us         2.46
+    L1/TEX Cache Throughput           %        10.44
+    L2 Cache Throughput               %        13.04
+    SM Active Cycles              cycle     2,484.90
+    Compute (SM) Throughput           %         6.93
+    ----------------------- ----------- ------------
+
+    OPT   This kernel grid is too small to fill the available resources on this device, resulting in only 0.91 full
+          waves across all SMs. Look at Launch Statistics for more details.
+
+    Section: Launch Statistics
+    -------------------------------- --------------- ---------------
+    Metric Name                          Metric Unit    Metric Value
+    -------------------------------- --------------- ---------------
+    Block Size                                                 1,024
+    Cluster Scheduling Policy                           PolicySpread
+    Cluster Size                                                   0
+    Function Cache Configuration                     CachePreferNone
+    Grid Size                                                     64
+    Preferred Cluster Size                                         0
+    Registers Per Thread             register/thread              16
+    Shared Memory Configuration Size           Kbyte            8.19
+    Driver Shared Memory Per Block       Kbyte/block            1.02
+    Dynamic Shared Memory Per Block       byte/block               0
+    Static Shared Memory Per Block        byte/block               0
+    # SMs                                         SM              70
+    Stack Size                                                 1,024
+    Threads                                   thread          65,536
+    # TPCs                                                        35
+    Enabled TPC IDs                                              all
+    Uses Green Context                                             0
+    Waves Per SM                                                0.91
+    -------------------------------- --------------- ---------------
+
+    OPT   Est. Speedup: 8.571%
+          The grid for this launch is configured to execute only 64 blocks, which is less than the 70 multiprocessors
+          used. This can underutilize some multiprocessors. If you do not intend to execute this kernel concurrently
+          with other workloads, consider reducing the block size to have at least one block per multiprocessor or
+          increase the size of the grid to fully utilize the available hardware resources. See the Hardware Model
+          (https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-hw-model) description for more
+          details on launch configurations.
+
+    Section: Occupancy
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Max Active Clusters                 cluster            0
+    Max Cluster Size                      block            8
+    Overall GPU Occupancy                     %            0
+    Cluster Occupancy                         %            0
+    Block Limit Barriers                  block           24
+    Block Limit SM                        block           24
+    Block Limit Registers                 block            4
+    Block Limit Shared Mem                block            8
+    Block Limit Warps                     block            1
+    Theoretical Active Warps per SM        warp           32
+    Theoretical Occupancy                     %        66.67
+    Achieved Occupancy                        %        54.80
+    Achieved Active Warps Per SM           warp        26.30
+    ------------------------------- ----------- ------------
+
+    OPT   Est. Local Speedup: 17.81%
+          The difference between calculated theoretical (66.7%) and measured achieved occupancy (54.8%) can be the
+          result of warp scheduling overheads or workload imbalances during the kernel execution. Load imbalances can
+          occur between warps within a block as well as across blocks of the same kernel. See the CUDA Best Practices
+          Guide (https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html#occupancy) for more details on
+          optimizing occupancy.
+   
+    OPT   Est. Local Speedup: 33.33%
+          The 8.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the
+          hardware maximum of 12. This kernel's theoretical occupancy (66.7%) is limited by the number of warps within
+          each block.
+
+    Section: GPU and Memory Workload Distribution
+    -------------------------- ----------- ------------
+    Metric Name                Metric Unit Metric Value
+    -------------------------- ----------- ------------
+    Average DRAM Active Cycles       cycle        8,236
+    Total DRAM Elapsed Cycles        cycle      265,216
+    Average L1 Active Cycles         cycle     2,484.90
+    Total L1 Elapsed Cycles          cycle      414,270
+    Average L2 Active Cycles         cycle     2,386.17
+    Total L2 Elapsed Cycles          cycle      126,432
+    Average SM Active Cycles         cycle     2,484.90
+    Total SM Elapsed Cycles          cycle      414,270
+    Average SMSP Active Cycles       cycle     2,411.47
+    Total SMSP Elapsed Cycles        cycle    1,657,080
+    -------------------------- ----------- ------------
+
+    OPT   Est. Speedup: 7.462%
+          One or more SMs have a much lower number of active cycles than the average number of active cycles. Maximum
+          instance value is 17.77% above the average, while the minimum instance value is 100.00% below the average.
+ 
+    OPT   Est. Speedup: 7.972%
+          One or more SMSPs have a much lower number of active cycles than the average number of active cycles. Maximum
+          instance value is 19.56% above the average, while the minimum instance value is 100.00% below the average.
+    
+    OPT   Est. Speedup: 7.462%
+          One or more L1 Slices have a much lower number of active cycles than the average number of active cycles.
+          Maximum instance value is 17.77% above the average, while the minimum instance value is 100.00% below the
+          average.
+   
+    OPT   Est. Speedup: 7.754%
+          One or more L2 Slices have a much higher number of active cycles than the average number of active cycles.
+          Maximum instance value is 17.12% above the average, while the minimum instance value is 8.81% below the
+          average.
+
+\end{lstlisting}
+
+
 \subsection{获取硬件限制：运行时API示例}
 
-\begin{figure}
-    \centering
-    \includegraphics[width=0.75\linewidth]{resources/cuda-091.png}
-    \caption{}
-    \label{fig:placeholder}
-\end{figure}
+% \begin{figure}
+%     \centering
+%     \includegraphics[width=0.75\linewidth]{resources/cuda-091.png}
+%     \caption{}
+%     \label{fig:placeholder}
+% \end{figure}
 
 运行一个简单的代码，它包含运行时 API 函数，用于获取 GPU 每个 SM 的最大 Warp 数。首先使用 \texttt{nvidia-smi} 命令来识别 GPU 的名称，以获取方程的分母。如输出所示，GPU 是 GeForce 系列的一员，具体型号是 RTX 3090。
 
@@ -32,6 +160,44 @@
 这里需要的度量指标是 \texttt{cudaDevAttrMaxThreadsPerMultiProcessor}。这个函数需要两个输入：设备 ID 和属性名称，然后属性值将被存储在定义为整数的变量中。同时可以将该值除以 32 以获得每个 SM 的最大 Warp 数。
 
 进入 CUDA 课程文件夹，列出所有可用文件。复制文件名，然后使用 nvcc 编译器，将可执行文件命名为 \texttt{read\_metrics}，放上 \texttt{.cu} 文件，点击回车。执行后，如所示，RTX 3090 GPU 中每个 SM 的最大 Warp 数是 48（1536/32）。使用第二个函数结果也一样，两种方法都可以使用。
+
+\begin{lstlisting}
+
+#include <cuda_runtime.h>
+#include <stdio.h>
+
+int main() {
+    int device;
+    cudaGetDevice(&device); // Get current CUDA device
+    cudaDeviceProp prop;
+
+    cudaGetDeviceProperties(&prop, device);
+    printf("Max_threads_per_SM 0: %d \n", prop.maxThreadsPerMultiProcessor);
+    printf("Max_warps_per_SM   0: %d \n\n\n", (prop.maxThreadsPerMultiProcessor)/32);
+
+    int maxThreadsPerMP = 0;
+    cudaDeviceGetAttribute(&maxThreadsPerMP, cudaDevAttrMaxThreadsPerMultiProcessor, device);
+    printf("Max_threads_per_SM 1: %d \n", maxThreadsPerMP);
+    printf("Max_warps_per_SM   1: %d \n", maxThreadsPerMP/32);
+
+    return 0;
+}
+
+\end{lstlisting}
+
+
+NVIDIA GeForce RTX 5070 Ti 上运行结果
+
+
+\begin{lstlisting}
+Max_threads_per_SM 0: 1536
+Max_warps_per_SM   0: 48
+
+
+Max_threads_per_SM 1: 1536
+Max_warps_per_SM   1: 48
+\end{lstlisting}
+
 
 \subsection{理论占用率计算示例}
 

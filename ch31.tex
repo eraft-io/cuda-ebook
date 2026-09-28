@@ -64,6 +64,29 @@
 
 如果还记得在上一节解释了"已分配活动块"（Allocated Active Blocks）这个术语，并且说过这真的非常重要。在继续本章之前，需要先看那个章节。总之具体在哪里可以找到这个值？有 16、128、48，可以来到这里进入占用率部分，然后取这四个值中最小的那个。已分配活动块的数量将是 16。这就是为什么这里加了 16。很好，使用 CUDA API，可以获取 GPU 上可用的 SM 数量。在 GPU 上，得到的数量是 38 个 SM。
 
+\begin{figure}
+    \centering
+    \includegraphics[width=0.75\linewidth]{resources/cuda-114.png}
+    \caption{}
+    \label{fig:placeholder}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.75\linewidth]{resources/cuda-115.png}
+    \caption{}
+    \label{fig:placeholder}
+\end{figure}
+
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.75\linewidth]{resources/cuda-116.png}
+    \caption{}
+    \label{fig:placeholder}
+\end{figure}
+
+
 \subsection{波次与执行时间分析}
 
 现在想计算波次（Wave）数量，这里需要了解更多关于波次定义的信息。说过已分配活动块的数量通常指的是可以在一个 SM 中同时运行的块的数量。意思是在那种情况下，可以同时运行 16 个块在每个 SM 上。但是记住块的总数不是 16、32 甚至 64，而是超过 100 万。从那个巨大的数字中，可以在每个 SM 上同时运行 16 个，那么剩下的块怎么办？这就是所说的波次。

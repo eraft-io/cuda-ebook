@@ -7,6 +7,13 @@
     \item \textbf{寄存器（Registers）}：速度最快，由编译器分配给每个线程私有使用。
 \end{enumerate}
 
+\begin{figure}
+    \centering
+    \includegraphics[width=0.75\linewidth]{resources/cuda-144.png}
+    \caption{}
+    \label{fig:placeholder}
+\end{figure}
+
 \noindent \textbf{重要提示}：在之前的全局内存归约实现中，数据加载时已隐式经过L1/L2缓存。若仅简单将数据搬入共享内存而不改变访存模式，性能提升有限（通常仅10\%--20\%）。共享内存的真正价值在于\textbf{配合算法重构}（如循环展开、消除Bank冲突）才能释放其低延迟优势。
 
 \subsection{共享内存优化实现}
@@ -19,6 +26,13 @@
     \item 归约循环：全程在\verb|sdata|上进行读写，避免重复访问全局内存；
     \item 边界安全：使用三元运算符防止越界读取垃圾值。
 \end{itemize}
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.75\linewidth]{resources/cuda-145.png}
+    \caption{}
+    \label{fig:placeholder}
+\end{figure}
 
 \subsection{边界检查的重要性}
 当向量长度不是块大小的整数倍时，必须对超出范围的索引返回0而非未定义值：
@@ -63,6 +77,7 @@ sdata[tid] = val + val2;
 \begin{lstlisting}[caption={Warp级循环展开设备函数}]
 __device__ void warpReduce(volatile float* sdata, int tid) {
     // Warp内32线程锁步执行，无需__syncthreads()
+    sdata[tid] += sdata[tid + 32];
     sdata[tid] += sdata[tid + 16];
     sdata[tid] += sdata[tid + 8];
     sdata[tid] += sdata[tid + 4];
@@ -87,6 +102,14 @@ __device__ void warpReduce(volatile float* sdata, int tid) {
 \end{itemize}
 
 \noindent \textbf{重要提醒}：最优块大小高度依赖GPU架构、问题规模及访存模式，必须通过Profiling驱动的实验确定，不可盲目套用经验值。
+
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.75\linewidth]{resources/cuda-146.png}
+    \caption{}
+    \label{fig:placeholder}
+\end{figure}
 
 \subsection{总结与进阶方向}
 本章验证了以下核心结论：

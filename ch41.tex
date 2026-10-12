@@ -59,35 +59,53 @@
 实测显示，将步长更新逻辑替换为位运算后，获得了约2\%的额外性能提升。虽然幅度不大，但在大规模并行计算中，消除百万级线程
 的整数除法开销仍是良好的编程实践。
 
+\begin{figure}
+    \centering
+    \includegraphics[width=0.75\linewidth]{resources/cuda-143.png}
+    \caption{}
+    \label{fig:placeholder}
+\end{figure}
+
 \subsection{总结与展望}
 本章证明了“增加每线程工作量”是解决向量归约中线程闲置问题的有效手段。通过将每块处理元素翻倍，实现了全线程活跃，大幅降低了执行时间并提升了 SM 占用率。然而，当前实现仍受限于全局内存带宽。下一阶段，将结合 \textbf{共享内存} 技术，减少对 L2 缓存及全局内存的访问压力，进一步挖掘 GPU 性能潜力。建议学习者在掌握本章内容后，尝试将共享内存与线程工作量优化相结合，以获得最佳实践效果。
 
 \section*{附录：关键代码片段}
 
 \begin{lstlisting}[caption={优化后的向量归约内核（增加每线程工作量）}]
-__global__ void reduceOptimized(float *g_idata, float *g_odata, unsigned int n) {
-    extern __shared__ float sdata[]; // 预留共享内存，本章暂未启用
-    
-    // 每个线程处理2个元素，全局索引需乘2
-    unsigned int tid = threadIdx.x;
-    unsigned int i = (blockIdx.x * blockDim.x + threadIdx.x) * 2;
-    
-    // 第一阶段：预归约，将所有线程激活
-    // 将后半部分数据加到前半部分对应位置
-    if (i + blockDim.x < n) {
-        g_idata[i] += g_idata[i + blockDim.x];
+
+__global__ void reduce_in_place(float* input, int n) {
+    // 1. 计算线程索引
+    int tid = threadIdx.x;
+    // 计算当前线程负责处理的第一个元素的全局索引
+    int index = 2 * blockIdx.x * blockDim.x + threadIdx.x;
+
+    // 2. 初始合并阶段 (Initial Merge Step)
+    // 每个线程首先处理两个相邻的元素，将它们相加并存储到第一个位置。
+    // 这是一种常见的优化，可以减少后续循环的迭代次数。
+    if (index + blockDim.x < n) { 
+        input[index] += input[index + blockDim.x];
     }
-    
-    // 第二阶段：标准归约（此时有效数据量已减半）
-    // 后续逻辑与原256元素归约完全相同
-    for (unsigned int stride = blockDim.x / 2; stride > 0; stride >>= 1) {
-        __syncthreads();
-        if (tid < stride) {
-            g_idata[i] += g_idata[i + stride];
+    __syncthreads(); // Ensure all threads have completed the initial merge.
+
+    // 3. 块内归约循环 (Intra-block Reduction Loop)
+    // 使用树形结构（Tree-based）或对数步长（Logarithmic Stride）的方法进行归约。
+    // stride 从 1 开始，每次翻倍 (1, 2, 4, 8, ...)，直到覆盖整个 block。
+    for (int stride = 1; stride < blockDim.x; stride *= 2) {
+        if (index % (2 * stride) == 0) { // 只有特定索引的线程参与此轮计算
+            if (index + stride < n) {
+                input[index] += input[index + stride];
+            }
         }
-    
-    if (tid == 0) {
-        g_odata[blockIdx.x] = g_idata[i];
+        __syncthreads(); // Ensure all threads have completed this step before next.
     }
+
+    // 4. 写入最终结果 (Write Final Result)
+    // 每个线程块（block）将它的归约结果（即该块所有元素的和）写回到输入数组的开头部分。
+    // 结果存储在 input[blockIdx.x]，这样所有 block 的结果会连续存放。
+    if (tid == 0) {
+        input[blockIdx.x] = input[0]; // Write the reduced sum for this block.
+    }
+}
+
 \end{lstlisting}
 

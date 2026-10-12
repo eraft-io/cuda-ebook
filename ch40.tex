@@ -2,10 +2,10 @@
 
 
 \subsection{引言：调试选项引发的输出差异}
-在上一章中，通过移除取模过滤器提升了向量归约的性能。然而，有学生反馈使用完全相同的代码却得到了与演示不同的错误结果。经排查，问题的根源在于编译选项中是否启用了 \textbf{-G}（Generate Device Debug Information）选项。
+在上一章中，通过移除取模过滤器提升了向量归约的性能。然而，使用完全相同的代码，在默认编译（\lstinline{nvcc -o test2 02_vector_reduction_with_while.cu}）下运行却得到了错误结果；而加上 \textbf{-G}（Generate Device Debug Information）选项重新编译后，输出反而正确。问题的根源在于编译选项的差异改变了线程的执行时序。
 
 
-本章将深入剖析这一现象背后的核心概念——\textbf{竞态条件（Race Condition）}，并解释为什么调试模式会“掩盖”这一并行编程中最常见的缺陷。
+本章将深入剖析这一现象背后的核心概念——\textbf{竞态条件（Race Condition）}，并解释为什么本例中恰恰是“禁用优化的调试版本”得到了正确结果。
 
 \subsection{核心概念：竞态条件 (Race Condition)}
 
@@ -36,8 +36,17 @@ if (tid + stride < blockDim.x) {
     \item \textbf{危险情况}：若线程 1 先完成写入（$A[1]=9$），而线程 0 此时才读取 $A[1]$，则线程 0 读到的是新值 9。$A[0]$ 变为 $0+9=9$，而非预期的 $0+1=1$。最终归约结果将完全错误。
 \end{enumerate}
 
-\subsection{为什么之前没有暴露问题？}
-在上一章的测试中，GPU 输出与 CPU 基准一致，这并非因为代码正确，而是因为 \textbf{编译器优化} 改变了实际的指令调度。当启用默认优化（-O2/-O3）时，NVCC 可能对指令进行重排或寄存器分配，使得线程 0 和线程 1 恰好在同一时钟周期读取了 $A[1]$ 的旧值。这是一种“幸运的巧合”，而非程序的正确性保证。
+\begin{figure}
+    \centering
+    \includegraphics[width=0.75\linewidth]{resources/cuda-140.png}
+    \caption{}
+    \label{fig:placeholder}
+\end{figure}
+
+\subsection{为什么调试版本反而正确？}
+在上一章的演示中，程序是在 Visual Studio 的 CUDA 调试会话（等价于 \lstinline{-G}）中运行的，GPU 输出与 CPU 基准一致。这与本节开头的实测一致：加 \lstinline{-G} 时结果正确，不加时结果错误。原因在于 \lstinline{-G} 禁用了一切设备端优化：代码严格按照源码顺序执行，同一线程束（Warp）内的线程以锁步（Lock-step）方式同时读取 $A[1]$ 的旧值，随后才执行写入，竞争窗口被压到最小，因而“恰好”得到正确结果。
+
+而默认优化（-O2/-O3）下，NVCC 会对指令进行重排、循环展开与寄存器重分配，打破了相邻线程原有的同步时序：某些线程的写入可能先于其他线程的读取完成，竞争窗口被放大，错误结果稳定复现。因此，“Debug 正确、Release 错误”本身就是竞态条件存在的典型信号。
 
 \subsection{-G 选项与编译器优化的关系}
 
@@ -50,27 +59,26 @@ if (tid + stride < blockDim.x) {
    （启用此选项将禁用设备代码的所有优化。）
 \end{quote}
 
-\subsection{优化禁用如何暴露竞态}
+\subsection{优化开关如何影响竞态表现}
 \begin{itemize}
-    \item \textbf{开启优化（默认/Release）}：编译器为了提升并行度，可能重排指令、合并内存访问或将变量驻留寄存器。这种激进的调度可能无意中让竞争线程在同一时刻读取数据，从而“掩盖”了竞态条件。
-    \item \textbf{关闭优化（-G/Debug）}：代码严格按照源码顺序逐条执行，指令间插入额外的同步屏障以支持单步调试。这种串行化的执行方式改变了线程间的相对时序，使得“线程1先写、线程0后读”的竞争窗口被放大，从而稳定复现错误结果。
+    \item \textbf{关闭优化（-G/Debug）}：代码严格按照源码顺序逐条执行，同一线程束内的线程以锁步方式运行——所有线程先完成读取，再执行写入。因此在本例中，线程 0 读取的是 $A[1]$ 的旧值，恰好得到正确结果。
+    \item \textbf{开启优化（默认/Release）}：编译器为了提升并行度，可能重排指令、展开循环、合并内存访问或将变量驻留寄存器。这种激进的调度打破了相邻线程之间的同步时序，使得“线程 1 先写、线程 0 后读”的竞争窗口被放大，从而稳定复现错误结果。
 \end{itemize}
 
 
 关键结论
 
-\textbf{调试模式下结果正确 $\neq$ 代码正确。} \\相反，调试模式往往更容易暴露竞态条件。如果你的程序仅
-在 Release 模式下正确而在 Debug模式下出错（或反之），这几乎是竞态条件的确切信号。
+\textbf{调试模式下结果正确 $\neq$ 代码正确。} \\竞态条件的表现取决于线程时序，而时序又受编译优化影响。本例中恰好是 Debug 正确、Release 错误；在其他场景或硬件上，结果可能完全相反。无论哪种情况，只要不同编译选项下结果不一致，就几乎可以确定存在竞态条件。依赖“某个编译选项恰好正确”的代码是不可靠的。
 
 \subsection{跨平台编译配置对比}
 
 \subsection{Linux 命令行 (NVCC)}
 
-Release 模式（默认优化，可能掩盖竞态）
+Release 模式（默认优化，本例中稳定复现错误结果）
 
 nvcc -O2 -arch=sm\_80 reduce.cu -o reduce\_release
 
-Debug 模式（禁用优化，暴露竞态）
+Debug 模式（禁用优化，本例中恰好得到正确结果）
 
 nvcc -G -g -arch=sm\_80 reduce.cu -o reduce\_debug
 
@@ -84,6 +92,14 @@ nvcc -G -g -arch=sm\_80 reduce.cu -o reduce\_debug
     \item \textbf{代码生成架构}：属性 $\to$ CUDA C/C++ $\to$ Device $\to$ Code Generation。VS 默认可能为 \lstinline{compute_52,sm_52}，务必修改为你实际GPU的架构（如 RTX 3060 对应 \lstinline{compute_80,sm_80}），否则可能因 JIT 编译导致额外开销或行为差异。
 \end{enumerate}
 
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.75\linewidth]{resources/cuda-141.png}
+    \caption{}
+    \label{fig:placeholder}
+\end{figure}
+
 \subsection{实践任务与验证方法}
 
 \subsection{四象限测试矩阵}
@@ -94,9 +110,9 @@ nvcc -G -g -arch=sm\_80 reduce.cu -o reduce\_debug
 \hline
 \textbf{配置} & \textbf{带过滤器（安全）} & \textbf{无过滤器（有竞态）} \\
 \hline
-Release (-O2) & ✅ 正确，速度快 & ⚠️ 可能正确（幸运），速度快 \\
+Release (-O2) & ✅ 正确，速度快 & ❌ 错误（优化放大竞争窗口），速度快 \\
 \hline
-Debug (-G) & ✅ 正确，速度慢 & ❌ 错误，速度慢 \\
+Debug (-G) & ✅ 正确，速度慢 & ⚠️ 恰好正确（时序固定），速度慢 \\
 \hline
 \end{tabular}
 \end{center}
@@ -104,13 +120,20 @@ Debug (-G) & ✅ 正确，速度慢 & ❌ 错误，速度慢 \\
 \subsection{预期观察}
 \begin{itemize}
     \item \textbf{带过滤器版本}：无论 Release 还是 Debug，输出均应正确（因为从根本上消除了数据竞争）。
-    \item \textbf{无过滤器版本}：Release 下可能偶然正确，但 Debug 下应稳定输出错误值。
+    \item \textbf{无过滤器版本}：本例实测中，Release（默认优化）下稳定输出错误值，Debug（\lstinline{-G}）下恰好输出正确值。注意：竞态的表现与硬件、驱动及编译器版本相关，不同环境下可能观察到相反的结果，但“两种模式结果不一致”这一现象本身即竞态存在的证据。
     \item \textbf{性能差异}：Debug 模式的执行时间通常是 Release 模式的 2--5 倍，这反映了编译器优化对性能的巨大影响。
 \end{itemize}
 
+\begin{figure}
+    \centering
+    \includegraphics[width=0.75\linewidth]{resources/cuda-142.png}
+    \caption{}
+    \label{fig:placeholder}
+\end{figure}
+
 \subsection{总结}
 \begin{enumerate}
-    \item \textbf{竞态条件是并行编程的核心挑战}：移除取模过滤器虽减少了指令开销，但引入了读写冲突。在上一章的性能提升是以牺牲正确性为代价的（除非硬件调度恰好配合）。
+    \item \textbf{竞态条件是并行编程的核心挑战}：移除取模过滤器虽减少了指令开销，但引入了读写冲突。上一章的性能提升是以牺牲正确性为代价的——本例中仅在 -G 调试模式下恰好得到正确结果，任何依赖特定编译选项的“正确性”都不可靠。
     \item \textbf{理解编译器优化的双刃剑效应}：优化既能提升性能，也可能掩盖bug；禁用优化虽便于调试，但会改变时序行为。
     \item \textbf{正确性优先于性能}：在后续优化中，我们必须通过算法设计（如共享内存、Warp Shuffle）来 \textbf{消除} 竞态，而非依赖编译器的“幸运调度”。
     \item \textbf{浮点精度说明}：CPU与GPU输出的微小尾数差异属于正常现象（IEEE 754 累加顺序不同），可通过改用 \lstinline{double} 类型验证。但若出现数量级差异（如 $10^{11}$ vs $10^{10}$），则必为竞态条件所致。

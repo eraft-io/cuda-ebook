@@ -51,6 +51,13 @@
     \item[掩码（Mask）]：指定参与洗牌操作的线程集合。通常设为\texttt{0xffffffff}（即所有32个线程均参与）。
 \end{description}
 
+\begin{figure}
+    \centering
+    \includegraphics[width=0.75\linewidth]{resources/cuda-147.png}
+    \caption{}
+    \label{fig:placeholder}
+\end{figure}
+
 \subsection{规约中的工作流}
 在使用洗牌操作优化规约时，算法粒度从“线程块”细化为“线程束”：
 \begin{enumerate}

@@ -1,72 +1,10 @@
 \section{CUDA GPU 并行编程：向量归约代码解析与性能剖析}
 
-欢迎大家。
+本节将讲解向量归约（Vector Reduction）的完整代码。首先编写一个在 CPU 端执行向量归约的函数，用于验证 GPU kernel 输出的正确性。具体方法是将 GPU kernel 的输出与 CPU 函数的输出进行比较。由于 CPU 函数逻辑简单且结果可验证，因此可以作为基准。
 
-在本视频中，我将讲解向量归约（vector reduction）的完整代码。
+\subsection{CPU 端归约函数}
 
-正如我们在这里看到的，这是我们在上一个视频中讲解过的 GPU kernel。
-
-现在我想开始编写 main 函数。
-
-但在此之前，我想先编写另一个用于在 CPU 端执行向量归约的函数。
-
-这样做的原因是我希望验证 GPU kernel 是否提供了正确的输出。
-
-我们该如何做到这一点？
-
-通过将其输出与另一个 CPU 函数的输出进行比较。
-
-因为 CPU 函数很简单，而且我们确信它会提供正确的输出。
-
-因此，我们需要将 GPU kernel 的输出与同一个函数但在 CPU 端（而非 GPU 端）运行的输出进行比较。
-
-这就是为什么我们需要在这里编写一个用于 CPU 端向量归约的函数，以验证 GPU kernel 的正确性。
-
-那么现在让我们开始编写 CPU 函数。
-
-在这里我想问大家，你们还记得任何向量归约操作的输入和输出是什么吗？
-
-输入是一个包含许多元素的向量，就像这个一样。
-
-而输出是一个相同类型的值，它提供了输入向量所有元素的最终总和。
-
-所以输出就是一个值，对吧？
-
-这就是为什么 CPU 函数的返回类型是 float，因为我们需要一个与输入类型相同的值。
-
-让我们给这个函数起个名字。
-
-比如 cpu_reduce。
-
-由于这将执行与 GPU kernel 类似的向量归约操作，
-
-所以它们必须具有相同的输入参数。
-
-因此，我将复制这两个输入参数并放在这里。
-
-然后我们需要定义一个变量来存储输出结果。
-
-所以我定义 sum 等于零。
-
-因为这个向量包含许多元素，我们需要一个 for 循环来遍历所有元素。
-
-这里的 i 值将从零开始。
-
-只要 i 小于 n（即总大小或最后一个索引），这个 for 循环就会一直执行。
-
-然后我们将 i 加一。
-
-在这里我们需要写上 sum += input[i]。
-
-就是这样。
-
-一旦完成 for 循环，我们就在这个变量中得到了最终的输出结果。
-
-所以我们需要从这个函数中返回这个 sum 变量。
-
-这可以通过这条指令完成：return sum;。
-
-这就完成了。
+向量归约的输入是一个包含多个元素的向量，输出是一个与输入类型相同的标量值，即所有元素的总和。因此 CPU 函数的返回类型为 float。函数命名为 \texttt{cpu\_reduce}，参数与 GPU kernel 一致。函数通过 for 循环遍历所有元素并累加，最终返回 sum 变量。
 
 \begin{lstlisting}
 float cpu_reduce(float* input, int n) {
@@ -78,380 +16,102 @@ float cpu_reduce(float* input, int n) {
 }
 \end{lstlisting}
 
+\subsection{CUDA 应用程序的七个步骤}
 
-现在我们需要编写 main 函数。
+接下来编写 main 函数。回顾之前章节中介绍的 CUDA 应用程序七个步骤：
 
-main 函数可以这样开始：int main()。
+\textbf{第一步：在主机和设备上为向量分配空间。}
 
-就这样。
+本例仅有一个输入向量，需分别在 CPU 和 GPU 上为其分配空间。设备端使用 \texttt{d\_input}，主机端使用 \texttt{h\_input}。主机端使用 C++ 的 \texttt{new} 操作符分配，元素数量设为 $n = 1024 \times 1024$。
 
-你们还记得任何 CUDA 应用程序的第一步是什么吗？
+\begin{lstlisting}
+float* d_input;
+float* h_input = new float[n];
+\end{lstlisting}
 
-我想我在第二部分或第三部分中讲解过任何 CUDA 应用程序的七个步骤。
+设备端使用 \texttt{cudaMalloc} 分配显存。需注意，分配的大小是字节数而非元素个数，因此需用 \texttt{size\_t size = n * sizeof(float)} 计算。每个 float 占 4 字节，总字节数为元素数量乘以 4。
 
-所以你们需要复习一下那个视频或章节。
+\begin{lstlisting}
+size_t size = n * sizeof(float);
+cudaMalloc(&d_input, size);
+\end{lstlisting}
 
-让我带大家回顾一下所有的步骤。
+\textbf{第二步：在主机端初始化输入向量。}
 
-第一步是在主机（host）和设备（device）上为向量分配空间。
+使用 for 循环将每个元素初始化为其索引值，并通过 \texttt{static\_cast<float>(i)} 进行类型转换。
 
-我这里只有一个向量。
+\begin{lstlisting}
+for (int i = 0; i < n; i++) {
+    h_input[i] = static_cast<float>(i);
+}
+\end{lstlisting}
 
-所以我要为输入向量在 CPU 和 GPU 上分配空间。
+\textbf{第三步：将主机数据复制到设备端。}
 
-好的，让我们现在开始。
+使用 \texttt{cudaMemcpy} API，参数依次为目标地址（设备端 \texttt{d\_input}）、源地址（主机端 \texttt{h\_input}）、字节数（size）和传输方向（\texttt{cudaMemcpyHostToDevice}）。
 
-我先写 float*。
+\begin{lstlisting}
+cudaMemcpy(d_input, h_input, size, cudaMemcpyHostToDevice);
+\end{lstlisting}
 
-先从设备（GPU）端开始。
+\textbf{第四步：配置 kernel 启动参数。}
 
-所以我写 d_ 表示 device，将这个向量命名为 input。
+设定 block size 为 256。grid size 需确保 block 数量乘以 block size 不小于 n。通用公式为：
 
-然后在主机端做同样的事情。
+\begin{lstlisting}
+int blocksize = 256;
+int gridsize = (n + blocksize - 1) / blocksize;
+\end{lstlisting}
 
-h_ 表示 host，命名为 input。
+当 $n = 1024 \times 1024$、blockSize = 256 时，gridSize = 4096。公式 \texttt{(n + blockSize - 1) / blockSize} 可解决 n 不是 blockSize 整数倍时的向上取整问题。
 
-在 CPU 端分配空间时我们可以使用两种方法。
+\textbf{第五步：调用 CPU 函数获取基准结果。}
 
-你可以使用 malloc，这是 C 语言的方法。
+在启动 GPU kernel 之前，先调用 CPU 函数获取归约结果，以便后续与 GPU 输出进行比较。
 
-或者你可以使用 new，这是 C++ 的方法。
+\begin{lstlisting}
+float sum = cpu_reduce(h_input, n);
+std::cout << sum << std::endl;
+\end{lstlisting}
 
-所以我在这里使用 new float。
+\textbf{第六步：启动 GPU kernel。}
 
-你知道我们要在 CPU 内存中分配多少个元素吗？
+根据前一节的分析，向量归约需要多次启动 kernel。第一次 kernel 处理全部 $n$ 个元素，每个 block 产生一个部分和。第一次执行时 grid size 为 4096，因此产生 4096 个部分和。
 
-假设是 n。
+\begin{lstlisting}
+reduce_in_place<<<gridsize, blocksize>>>(d_input, n);
+cudaDeviceSynchronize();
+\end{lstlisting}
 
-好的。
+\texttt{cudaDeviceSynchronize()} 用于确保 CPU 等待 GPU kernel 执行完毕后再进入下一步。
 
-所以我在这里定义 int n = 1024 * 1024。
+第二次 kernel 以 4096 个部分和作为输入。block size 仍为 256，grid size 为 $4096 / 256 = 16$，即第二个 kernel 在 16 个 block 上执行，产生 16 个部分和。
 
-我知道这比一百万要大，但我们通常称之为“一百万”。
+\begin{lstlisting}
+reduce_in_place<<<4096 / blocksize, blocksize>>>(d_input, 4096);
+cudaDeviceSynchronize();
+\end{lstlisting}
 
-在这里我们为这个向量分配了这么多元素。
+第三次 kernel 仅需 1 个 block，因为待处理元素仅 16 个，不足一个 block（256 线程）。
 
-但这只是在主机端、CPU 侧。
+\begin{lstlisting}
+reduce_in_place<<<1, blocksize>>>(d_input, 16);
+cudaDeviceSynchronize();
+\end{lstlisting}
 
-我们还没有为 GPU 端分配空间。
+\textbf{第七步：将结果从设备复制回主机并释放资源。}
 
-那就让我们为 GPU 端分配吧。
+最终结果存储在 \texttt{d\_input[0]}。仅需复制一个 float 元素（4 字节），而非整个向量。
 
-还记得我们在 GPU 端分配空间时使用的 API 吗？
+\begin{lstlisting}
+cudaMemcpy(h_input, d_input, sizeof(float), cudaMemcpyDeviceToHost);
+std::cout << "GPU output: " << h_input[0] << std::endl;
 
-让我提醒一下，它是 cudaMalloc，你可以在这里找到它。
+cudaFree(d_input);
+delete[] h_input;
+\end{lstlisting}
 
-当你写下括号时，你会看到该 API 所需的参数。
-
-正如我们在这里看到的，有一个指针和一个 size。
-
-所以我在这里写入 d_input。
-
-然后是 size，你知道 size 是多少吗？
-
-size 不是 n，因为 n 是向量中元素的数量。
-
-但这并不是 size（字节大小）。
-
-元素数量不等于向量的字节大小。
-
-所以我在这里用 size_t 定义一个 size 变量。
-
-它的名字叫 size。
-
-它将等于 n * sizeof(float)。
-
-因为每个 float 元素占 4 个字节。
-
-所以我们需要将 4 字节乘以元素数量，才能得到这个向量的总字节数。
-
-然后在这里传入 size。
-
-现在我们在 GPU 显存上分配了空间。
-
-下一步是在主机端初始化输入向量，因为虽然我们已经在 CPU 端分配了空间，但它目前只包含零。
-
-所以我们需要在 host 向量中写入一些值。
-
-怎么做呢？
-
-非常简单。
-
-你可以在这里使用一个从 0 到 n 的 for 循环，每次 i++。
-
-在这里我写入 h_input[i] = static_cast<float>(i)。
-
-你可以初始化为任何值。
-
-但因为 h_input 是 float 类型的输入向量，
-
-所以我在这里使用 static_cast<float>(i)。
-
-就这样。
-
-这样我们就把整数 i 转换成了 float。
-
-现在我们已经在主机端初始化了输入向量。
-
-接下来需要将这些数据复制到 GPU 端。
-
-这就是下一步。
-
-我们需要将 host 数据或 host 向量复制到 device 端。
-
-但在那之前，我想先编译一下这个应用程序，确保到目前为止没有任何错误。
-
-每当我们写了几行代码后，都需要确认能够成功编译，正如我们在这里看到的。
-
-现在让我们将 host 的值复制到 device 向量中。
-
-如果你还记得，我们有一个叫做 cudaMemcpy 的 API。
-
-如果没记错的话，是 cudaMemcpy。
-
-是的。
-
-当你写下它并打开括号时，你会看到所有的参数。
-
-我们需要目标地址（destination）。
-
-目标是 device 向量 d_input。
-
-源地址（source）是 h_input。
-
-count 参数就是这里的 size。
-
-我们有这个 size 变量，看到了吗？
-
-好的。
-
-传输方向是从 host 到 device。
-
-所以我选择 cudaMemcpyHostToDevice。
-
-不是 DeviceToHost，也不是 DeviceToDevice。
-
-我们需要的是 HostToDevice。
-
-就选这个。
-
-让我们编译一下，确保没有错误。
-
-报错了。
-
-不要看那些关于 thread ID 的错误提示，因为应用程序此时还不知道什么是 thread ID。
-
-每当你看到类似这里的错误时，它可能会连带影响 thread ID、block ID 等的报错。
-
-原来是 cudaMemcpy 拼写的问题。
-
-修正后就编译通过了，没有任何问题。
-
-现在我们需要配置 kernel 的启动参数。
-
-还记得 kernel 的配置吗？
-
-这涉及到 block size 和 grid size。
-
-我设定 int blockSize = 256。
-
-这是我选择的数字。你可以选择其他数字并比较性能。
-
-但现在这是我的选择。
-
-然后我设定 int gridSize = ...。
-
-你知道 gridSize 应该是多少吗？
-
-根据我们之前的讨论，应用程序中使用的元素总数应该等于线程总数。
-
-对吧？
-
-我们每个 block 有 256 个线程。
-
-所以我们必须确保 block 的数量乘以 block size 等于 n。
-
-如果 n 是 1024*1024，blockSize 是 256，那么 gridSize 就是 4096。
-
-这两个值的乘积应该等于前面两个数的乘积。
-
-但因为我们需要一个通用公式，不能直接写死 4096。
-
-因为如果你改变了 n，你就得再次修改这个值。
-
-所以我们需要一个通用公式。
-
-你可以直接用 n / blockSize。
-
-但如果 n 不是 blockSize 的倍数，这会得到一个浮点数结果。
-
-而 gridSize 不能是浮点数。
-
-解决办法是写成 (n + blockSize - 1) / blockSize。
-
-这样就解决了向上取整的问题。
-
-我在这里提一下，grid size 应该是 4096。
-
-我们可以通过打印来验证：std::cout << "Grid size: " << gridSize << std::endl;。
-
-运行后可以看到确实是 4096，完全正确。
-
-下一步是启动 GPU kernel。
-
-但在那之前，我想先调用 CPU 函数，而不是 GPU kernel。
-
-我想执行这个 CPU 函数来获取该向量在 CPU 上的最终总和，以便稍后与 GPU kernel 的输出进行比较。
-
-怎么做呢？
-
-非常简单。
-
-你只需要调用这个函数。
-
-例如：float cpuSum = cpu_reduce(h_input, n);。
-
-我把 host 向量传给它，因为这是一个 CPU 函数。
-
-元素个数是 n。
-
-然后打印出来：std::cout << "CPU Sum: " << cpuSum << std::endl;。
-
-看看有没有问题。
-
-运行正常。
-
-这就是所有元素的最终总和。
-
-现在我需要启动 GPU kernel。
-
-该怎么做呢？
-
-你需要在这里启动 GPU kernel。
-
-我想问大家，我们需要启动这个 kernel 多少次？
-
-可能至少两次，或者三次甚至更多。
-
-这取决于向量的大小。
-
-在这里我将一步一步地进行。
-
-首先启动第一次 kernel。
-
-这个 kernel 叫什么名字？
-
-叫 reduce_in_place。
-
-启动配置是 <<<gridSize, blockSize>>>。
-
-传入的参数是 d_input（注意不是 host 端的），以及大小 n。
-
-编译一下确保没有错误。
-
-没有错误。
-
-接着我们需要调用 cudaDeviceSynchronize()。
-
-我们需要这个函数来确保程序在此处暂停，直到 GPU kernel 完成所有 block 的执行。
-
-如果不加这一句，CPU 可能会在不等待 kernel 执行完毕的情况下直接进入下一步。
-
-这就是为什么需要同步。
-
-我想问问大家，这个 kernel 会做什么？
-
-这个 kernel 会在该向量上启动 4096 个 block。
-
-每个 block 有 256 个线程。
-
-但这个 kernel 会直接给出最终的总和吗？还是我们需要额外的步骤或函数？
-
-回想一下之前的图示，绿色部分是第一层。
-
-当你完成绿色部分的执行时，你就完成了 4096 个 block 的执行。
-
-在这个例子中，第一个 kernel 被划分为 4096 个 block，每个 block 都会产生一个最终值。
-
-这被称为“部分和”（partial sum）。
-
-所以我们需要把这 4096 个 block 的输出提取出来，作为第二个 kernel 的输入。
-
-也就是说，我们有一个包含 4096 个值的部分和向量。
-
-新 kernel 中的每个 block 依然包含 256 个线程，和之前一样。
-
-所以我们需要计算第二个 kernel 需要多少个 block。
-
-我把它写在这里。
-
-启动相同的 kernel。
-
-但我需要重新计算新的 grid size。
-
-block size 保持不变。
-
-从刚才的 printf 输出我们知道，第一次执行的 grid size 是 4096，这也正是部分和的数量。
-
-这意味着第一个 kernel 的输出并不是一个包含所有输入总和的单一值。
-
-不，这不是第一个 kernel 的最终输出。
-
-第一个 kernel 的输出是一个大小为 4096 的向量。
-
-想象一下，我们声明了一个大小为 4096 的变量，并对该向量应用相同的向量归约 kernel。
-
-仅此而已。
-
-这个 kernel 会将其输出存储在该向量的开头，也就是前 4096 个元素的位置。
-
-所以现在我们需要做的是将 n 改为 4096，因为我们只需要处理来自第一个向量的部分和。
-
-我们不需要再处理那一百万个元素了，对吧？
-
-我们只需要处理部分和，而部分和的数量正好是 4096。
-
-同样，我们也需要再次同步。
-
-现在我想再问大家，当这个函数执行完毕后，我们会得到多少个输出？
-
-要想知道输出数量，你需要知道有多少个 block，因为每个 block 只会提供一个值。
-
-所以输出元素的数量等于 kernel 的 block 数量。
-
-那么这里应该设置多少个 block 呢？
-
-正如我所说，我们现在的输入向量大小是 4096。
-
-所有 kernel 的 block size 都是 256。
-
-我们需要将这个大小为 4096 的向量进行划分，每部分大小为 256。
-
-在这种情况下，4096 / 256 = 16。
-
-所以第二个 kernel 将在 16 个 block 上执行。
-
-希望这很容易理解。
-
-让我再解释一遍。
-
-这是第一个 kernel，它处理一百万个元素。
-
-所以我们在这里传入了一百万个元素。
-
-我们将这个向量传递给后续的所有 kernel。
-
-但是，当你把这个向量传给下一个 kernel 时，你要处理或使用其中多少个元素？
-
-这就是每一步或每个 kernel 之间的区别。
-
-在这里，我们要处理整个向量，也就是一百万个元素。
-
-一旦完成这个 kernel 的执行，它就会提供一个输出。
-
-这个输出是所有 block 的部分和。
-
-对吧？
+完整的 main 函数代码如下：
 
 \begin{lstlisting}
 
@@ -505,212 +165,15 @@ int main() {
 }
 \end{lstlisting}
 
+\subsection{精度差异说明}
 
-因为在这个 kernel 中有 4096 个 block，所以我们将有 4096 个输出值。
+运行程序后，CPU sum 和 GPU sum 的值非常接近，但小数点后可能存在微小差异。这是由于 GPU 与 CPU 使用了不同的浮点精度。若将数据类型从 float 改为 double，两者的值将完全一致，因为 double 的精度高于 float。读者可自行验证。此外，可借助 C++ 模板（templates）机制实现数据类型的灵活切换，无需在代码中逐一修改。
 
-这就是为什么我们认为第一个 kernel 的输出只是一个包含这些值的新向量。
+\subsection{Nsight Compute 性能分析}
 
-这也是为什么在启动第二个 kernel 时，我们将 size 设为 4096，而不是 n。
+接下来使用 Nsight Compute 对应用程序进行性能分析（profiling）。性能分析的细节在前面的章节中已有详细说明，建议读者回顾相关内容。
 
-然后我们需要进入最后一步。
-
-你能告诉我这个 kernel 的输出是什么吗？
-
-我们应该从这个 kernel 中获取多少个元素？
-
-同样，输出应该等于 block 的数量。
-
-你知道有多少个 block 吗？
-
-这里有 16 个 block。
-
-所以我们会有一个新的……
-
-其实不是新的，我只是想让大家更容易理解。
-
-我们有一个名为 d_input 的向量，现在其中包含了 16 个元素。
-
-现在我们需要将这 16 个元素相加，得出一个最终值。
-
-这就是我们需要做的。
-
-顺便说一句，你完全可以在 CPU 端完成这一步，因为只有 16 个元素，非常简单。
-
-但我想在 GPU 端完成所有工作。
-
-所以我将再次启动这个 kernel。
-
-但现在我们只需要一个 block。
-
-知道为什么只需要一个 block 吗？
-
-因为在这个阶段，我们需要相加的元素只有 16 个。
-
-而我们的 block size 是 256。
-
-你要处理的元素数量少于 block size。
-
-所以你只需要一个 block。
-
-虽然一个 block 有 256 个线程对于 16 个元素来说有些大材小用，
-
-但我不会改变 block size。
-
-我会告诉你如何只使用这 256 个线程中的 16 个。
-
-我们只需要一个大小为 256 的 block。
-
-但在这里，我不需要处理大小为 4096 的向量。
-
-我只需要该向量中的 16 个元素。
-
-就是这样。
-
-这就是你需要做的全部步骤。
-
-但这里有个问题：如果你改变了 n 的值，你就必须重新计算这些值。
-
-所以我们需要自动化这个过程，以确保对于所有的 n 值都能适用。
-
-我们需要编写一个通用的公式。
-
-稍后我会给大家展示这个公式。
-
-但我之所以逐个 kernel、逐步地解释这个过程，是为了让大家更容易理解。
-
-当你完成所有执行后，你应该在该向量的起始位置（索引 0 处）得到一个值。
-
-所有元素的最终总和将位于此处的 0 号位置。
-
-所以我们需要将这个向量从 GPU 复制回 CPU，并打印该值，以验证我们是否得到了正确的输出，正如我们在视频开头所说的那样。
-
-该怎么做呢？
-
-非常简单。
-
-你只需要调用 cudaMemcpy。
-
-这次的目标地址是 CPU，而不是 GPU。
-
-所以我写入 h_input。
-
-源地址是 d_input。
-
-需要复制的大小只是一个元素的大小。
-
-或者说 sizeof(float)。
-
-知道为什么我在这里只复制 4 个字节吗？
-
-之前我们复制了整个 size，也就是一百万乘以 4 字节，即 4MB。
-
-因为现在我们需要的是结果。
-
-而结果就在这个向量的第一个位置。
-
-所以我们不需要复制该向量中的所有元素。
-
-我们只需要第一个元素。
-
-传输方向是 cudaMemcpyDeviceToHost。
-
-编译一下确保没有错误。
-
-没有错误。
-
-现在我们需要打印它。
-
-因为我们已经将数据从 device 复制到了 host，我们可以访问第一个元素 h_input[0]。
-
-打印输出：std::cout << "GPU Output: " << h_input[0] << std::endl;。
-
-这部分我标记为 GPU output，之前那个标记为 CPU sum。
-
-编译运行。
-
-在运行应用程序之前的最后一步是释放分配的空间。
-
-调用 cudaFree(d_input);。
-
-还需要释放 CPU 端的空间。
-
-使用 delete[] h_input;。
-
-因为 main 函数定义为 int 类型，所以需要 return 0;。
-
-现在运行程序。
-
-如你所见，CPU sum 是 5.4...，GPU sum 也是 5.4...。
-
-它们非常接近。
-
-但有一点微小的差异。
-
-如果你看小数点后的数字，CPU 是 9，而 GPU 这里是 7。
-
-这是因为 GPU 与 CPU 相比使用了不同的精度。
-
-这意味着如果你将应用程序中的数据类型从 float 改为 double，两者的值将会完全相同，因为 double 比 float 更精确。
-
-你可以自己测试一下。
-
-我已经在我这边测试过了，你需要在你那边进行测试。
-
-我不能把所有事情都做完。
-
-另外，你还可以使用模板（templates）。
-
-使用 C++ 模板可以让你只需更改一个词就能改变数据类型。
-
-而不需要在代码中到处修改 float。
-
-搜索一下 C++ templates 的相关内容，以便实现这一目的。
-
-既然我们已经得到了输出，接下来就需要对应用程序进行性能分析（profiling）。
-
-我们需要计算执行时间。
-
-然后讨论如何优化执行时间。
-
-如何优化这个应用程序的性能。
-
-我需要来到这里。
-
-我不需要再打印 grid size 了。
-
-只需要构建项目即可。
-
-不过无所谓。
-
-我需要打开 Nsight Compute 进行分析。
-
-打开后，Nsight Compute 会显示这个窗口。
-
-我们需要创建一个基准测试（baseline）。
-
-让我们清除之前的记录，从头开始。
-
-重复上述步骤。
-
-我们将这次运行命名为 "A"，作为 baseline（基准线）。
-
-Baseline 是我们在这个视频和下一个视频中进行所有后续比较的参考标准。
-
-让我们启动分析。
-
-现在正在进行 profiling。
-
-我已经在 profiling 章节中详细解释过这些细节。
-
-所以请去观看 profiling 章节中的所有视频，以便理解我接下来要讲的内容。
-
-在 Summary 选项卡中，我们可以看到有三个 kernel。
-
-它们的名称都是 reduce_in_place。
-
-但它们在性能指标上有着不同的数值。
-
-我们有 Duration（持续时间）、Compute Throughput（计算吞吐量）、Memory Throughput（内存吞吐量）、寄存器数量、Grid Size 和 Block Size。
+在 Nsight Compute 中创建一次新的分析运行，命名为 "A" 作为基准线（Baseline），后续所有优化版本将以此为参考标准。
 
 \begin{figure}
     \centering
@@ -719,54 +182,11 @@ Baseline 是我们在这个视频和下一个视频中进行所有后续比较�
     \label{fig:placeholder}
 \end{figure}
 
-看 Grid Size：第一个 kernel 是 4096，第二个是 16，最后一个是 1。
+在 Summary 选项卡中，可以看到三个 kernel 的信息，名称均为 \texttt{reduce\_in\_place}，但性能指标各不相同：Duration（持续时间）、Compute Throughput（计算吞吐量）、Memory Throughput（内存吞吐量）、寄存器数量、Grid Size 和 Block Size。
 
-这与我们在代码中使用的值完全吻合。
+观察 Grid Size：第一个 kernel 为 4096，第二个为 16，最后一个为 1，与代码中的配置完全吻合。Block Size 在所有 kernel 中保持恒定，均为 256 个线程。
 
-Block Size 在所有 kernel 中保持恒定，均为 256 个线程。
-
-我们现在需要重点关注的是 Duration。
-
-第一个 kernel 的持续时间是 284 微秒。
-
-第二个 kernel 是 15 或 16 微秒。
-
-最后一个 kernel 大约是 13 微秒。
-
-为什么第一个 kernel 耗时这么长？
-
-因为它有 4096 个 block。
-
-如果将这个 block 数量除以 GPU 中可用的 SM（Streaming Multiprocessor，流多处理器）数量，就会产生很多波次（waves）。
-
-我的 GPU 有 38 个 SM。
-
-4096 除以 38，意味着每个 SM 上要执行大约 108 个 block。
-
-但如果看第二个 kernel，
-
-我们每个 SM 只有一个 block，甚至超过一半的 SM 都处于空闲状态，因为我们有 38 个 SM，但只有 16 个 block。
-
-所以我们只需要 16 个 SM，这仅仅是一个波次（one wave）。
-
-每个 SM 执行完一个 block 后就结束了，不会再执行其他任务。
-
-而在第一种情况下，每个 SM 执行完一个 block 后，还会继续执行下一个，直到完成大约 108 个 block。
-
-这就是我们应用程序 baseline 的性能表现。
-
-你还可以查看 GPU Speed of Light、Stall Reasons、Occupancy、Launch Statistics 等部分。
-
-在 View 选项卡中，点击 Expand Sections，可以看到一些图表，例如 Compute Utilization 或 SM Utilization。
-
-这里显示大约是 74%。
-
-但 Memory Throughput 几乎只有 9%。
-
-这意味着相比于内存，我们使用了过多的计算资源。
-
-这里展示了不同单元的利用率。
-
+重点关注 Duration：第一个 kernel 耗时 284 微秒，第二个约 15--16 微秒，最后一个约 13 微秒。第一个 kernel 耗时最长的原因在于其包含 4096 个 block。以 GPU 拥有 38 个 SM（Streaming Multiprocessor，流多处理器）为例，4096 除以 38 意味着每个 SM 需执行约 108 个 block（即多个波次）。而第二个 kernel 仅 16 个 block，超过一半的 SM 处于空闲状态，每个 SM 仅执行一个 block 即完成（一个波次）。
 
 \begin{figure}
     \centering
@@ -796,66 +216,14 @@ Block Size 在所有 kernel 中保持恒定，均为 256 个线程。
     \label{fig:placeholder}
 \end{figure}
 
-例如 ALU 的利用率、FMA 的利用率、内存吞吐量等。
+在 View 选项卡中展开各部分，可观察到以下关键指标：
 
-这是一个时间轴图。
+\begin{itemize}
+    \item \textbf{SM 利用率：} 约 74\%，表明计算资源利用较为充分。
+    \item \textbf{Memory Throughput：} 仅约 9\%，说明相比于内存，计算资源使用过多，存在计算受限的特征。
+    \item \textbf{缓存命中率：} L1 命中率 91\%，L2 命中率约 80\%。这与向量加法（命中率接近 0\%）形成鲜明对比。原因在于向量归约中每个元素在多个步骤中被重复使用，产生了数据重用（Data Reuse），从而带来缓存命中。
+    \item \textbf{算术单元利用率：} ALU 和 FMA 有较高的利用率数值，而双精度利用率为零（因为使用的是 float 类型）。若将 float 改为 double，则会在双精度利用率一栏中看到相应数值。
+    \item \textbf{时间轴图：} 展示了执行过程中活跃 block 数量的变化，可用于识别瓶颈所在。
+\end{itemize}
 
-这意味着它展示了应用程序执行过程中发生的情况。
-
-有时平均活跃 block 数量会增加，有时会减少。
-
-这个图表对于理解瓶颈非常重要，比如什么时候出现了下降，什么时候达到了最大值。
-
-这也是不同算术单元利用率的图表。
-
-例如 ALU、FMA、双精度和张量核心的利用率。
-
-我们这里没有任何双精度运算，因为我们使用的是 float。
-
-这就是为什么我们在 ALU 和 FMA 上有数值，而在双精度上没有。
-
-如果你将 float 改为 double（并且需要在整个应用程序中进行更改），
-
-你就会在这里看到双精度利用率的数值。
-
-这是内存层级的图表。
-
-例如，L1 命中率是 91%，L2 命中率是 80%。
-
-如果你还记得向量加法（vector addition）的例子，我曾说过 L1 和 L2 的命中率是 0%。
-
-那是因为在向量加法中，每个元素只被使用了一次。
-
-但在这里，请看这个图。
-
-在第一步中，我们使用了第一个和第二个元素。
-
-在第二步中，我们再次使用了第一个元素以及另一个元素。
-
-而第一个元素在第一步中已经被使用过了。
-
-所以每个元素（比如位置 0）几乎在所有步骤中都被多次重用。
-
-这就是为什么我们在这里有数据重用。
-
-这也是为什么在 Nsight Compute 分析中会有缓存命中。
-
-L2 命中率几乎是 80%。
-
-这是从全局内存移动到 L2 的数据量。
-
-这是从 L2 到 L1 的数据量，以及从 L1 到计算单元的数据量等等。
-
-你需要观看 profiling 章节才能理解所有这些信息的含义。
-
-好了。
-
-我不会在这里详细解释关于 profiling 的所有内容，因为我们还有很多其他事情要做。
-
-我现在需要做的是优化。
-
-我觉得这个视频已经太长了。
-
-所以我想把优化部分放到下一个视频中讲解。
-
-我们就到此为止，下个视频再见。
+以上即为基准版本的性能分析结果。后续章节将在此基础上进行优化，并对比各版本的性能提升。

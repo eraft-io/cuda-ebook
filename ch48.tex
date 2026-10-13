@@ -1,74 +1,107 @@
-\section{CUDA GPU并行编程：张量核心（Tensor Core）技术详解}
+\section{CUDA GPU并行编程：矩阵乘法中的分块技术}
 
-\subsection{引言：张量核心的重要性}
+\subsection{引言}
 
-本章将深入讨论\textbf{张量核心（Tensor Core）}。张量核心是当
-今 NVIDIA GPU 中最核心的计算单元。自 2017 年首次被引入NVIDIA GPU以来，它已被广泛应用于深度学
-习、广义机器学习乃至科学计算等领域。其核心原因在于：张量核心是专为加速\textbf{矩阵乘法}而设计的专用硬件单元。
+在矩阵乘法的GPU优化中，\textbf{分块（Tiling）}是提升性能的核心技术。本章将深入探讨如何为矩阵乘法应用选
+择最佳的分块策略，重点分析矩阵尺寸、SM 数量与分块尺寸三者之间的制约关系，特别是针对非方阵的处理方法。
 
-深度学习极度依赖矩阵乘法运算。正如本系列首章所述，神经网络（例如卷积神经网络）的本质就是矩阵运算。以卷积神经网络为例，
-输入图像被表示为矩阵，滤波器（Filter）本身也是矩阵，通过将滤波器与图像矩阵相乘来实现特征提取。因此，我们需要一个
-专门用于加速矩阵乘法的硬件单元，这就是张量核心存在的意义。值得一提的是，AMD GPU 中对应的单元称为\textbf{矩阵核心（Matrix Core）}，其功能与张量核心完全相同。
+\subsection{关键参数与约束}
 
-\subsection{张量核心的架构演进与性能飞跃}
+在选择分块策略时，必须综合考虑以下三个关键参数：
 
-张量核心是专为深度学习和高性能计算（HPC）设计的专用硬件，能够快速执行混合精度矩阵乘法。它最早出现在 2017年发布
-的 \textbf{Volta} 架构中，随后历经 Turing、Ampere、Hopper、Ada Lovelace 以
-及最新的 Blackwell 等架构迭代。
+\begin{figure}
+    \centering
+    \includegraphics[width=0.75\linewidth]{resources/cuda-160.png}
+    \caption{}
+    \label{fig:placeholder}
+\end{figure}
 
-\subsection{代际性能对比}
-图1展示了不同架构 GPU 的性能差异（单位：TFLOPS）。从 Kepler、Maxwell、Pascal 到Volta，性能出现了质的飞跃：
-
-\begin{itemize}
-    \item \textbf{Pascal (P100)}：仅配备普通 CUDA 核心，峰值性能约为 15 TFLOPS。
-    \item \textbf{Volta (V100)}：首次引入张量核心，峰值性能跃升至约 125 TFLOPS。
-\end{itemize}
-相比 Pascal，Volta 在使用张量核心时实现了约 \textbf{9倍}的性能提升。这种巨大提升源于张量核心的特
-殊设计：每个张量核心内部由多个子单元组成，使其每个时钟周期可执行 64次融合乘加（FMA）运算，而普通 CUDA 核心每
-周期仅能执行 1 次运算。
-
-\subsection{数据类型与精度支持}
-
-不同架构的张量核心支持的数据类型逐步丰富：
-
-\begin{description}
-    \item[Volta 架构] 支持 FP16 $\times$ FP16 $\to$ FP16 以及 FP16 $\times$ FP16 $\to$ FP32。当输入矩阵数值较大时，为避免累加溢出，通常选择 FP32 作为输出精度。
-    \item[Turing 架构] 在 Volta 基础上增加了整数支持，包括 INT8 $\times$ INT8 $\to$ INT32 等格式。
-    \item[Ampere 架构] 进一步扩展了数据类型：
-    \begin{itemize}
-        \item \textbf{INT1}：适用于二值神经网络（Binary Neural Network），输入为 1-bit，输出至少为 4-bit 或 8-bit（因为累加结果无法用 1-bit 表示）。
-        \item \textbf{BF16 与 TF32}：新增 BFloat16 和 TensorFloat-32 格式，兼顾训练稳定性与计算速度。
-        \item \textbf{FP64}：支持双精度张量运算，拓展了科学计算应用场景。
-    \end{itemize}
-\end{description}
-
-以 Ampere (A100) 为例，使用普通核心时性能约为 19--20 TFLOPS，而启用张量核心后，根据数据类型不
-同，性能可达 156 至 312 TFLOPS。
-
-\subsection{软件生态与编程接口}
-
-硬件的革新推动了软件栈的全面更新。NVIDIA 对以下核心库进行了升级以支持张量核心：
-\begin{itemize}
-    \item \textbf{cuBLAS}：基础线性代数库
-    \item \textbf{cuDNN}：深度学习原语库
-    \item \textbf{cuSPARSE}：稀疏矩阵运算库
-    \item \textbf{cuFFT}：快速傅里叶变换库
-    \item \textbf{NCCL}：多GPU通信库
-\end{itemize}
-
-主流深度学习框架（如 PyTorch、TensorFlow、Caffe2、MXNet）均已在后端集成张量核心支持。用户在
-GPU 上执行矩阵乘法时，框架会自动调用张量核心，无需手动干预。
-
-\subsection{课程预告：实测与编程实践}
-
-在下一章中，我们将从理论转向实践：
 \begin{enumerate}
-    \item \textbf{性能实测}：对比相同尺寸矩阵乘法在普通核心与张量核心上的实际执行时间，验证理论性能差距。
-    \item \textbf{编程方法}：介绍两种使用张量核心的编程方式：
-    \begin{itemize}
-        \item \textbf{WMMA API}（Warp Matrix Multiply-Accumulate）：底层 Warp 级矩阵运算接口。
-        \item \textbf{cuBLAS / cuDNN}：高层库函数接口。
-    \end{itemize}
-    \item \textbf{对齐要求}：讨论矩阵维度对齐（如 128 字节倍数）对张量核心性能的影响。
+    \item \textbf{矩阵尺寸（Matrix Dimensions）}：包括方阵与非方阵。对于非方阵，需在X和Y维度上采用不同的分块尺寸（如 $32 \times 16$），前提是矩阵维度必须是分块尺寸的整数倍。
+    \item \textbf{SM数量（Number of SMs）}：直接决定GPU利用率。若分块总数少于SM数量，部分SM将处于空闲状态；若分块总数不是SM数量的整数倍，最后一轮计算将导致SM资源浪费。
+    \item \textbf{分块尺寸（Tile Size）}：直接影响共享内存占用与执行时间。通常需要通过实验（Profiling）确定最优值，而非盲目选择。
 \end{enumerate}
+
+\noindent \textbf{核心原则}：为了最大化GPU占用率（Occupancy），\textbf{总分块数应尽可能为SM数量的整数倍}，且矩阵维度应能被分块尺寸整除。
+
+\subsection{分块策略案例分析}
+
+以下案例假设GPU拥有 \textbf{16个SM}，旨在说明不同参数组合对性能的影响。
+
+\subsection{案例1：理想方阵分块}
+\begin{itemize}
+    \item \textbf{矩阵尺寸}：$40 \times 40$
+    \item \textbf{分块尺寸}：$4 \times 4$
+    \item \textbf{分析}：
+    \[    \text{X方向分块数} = \frac{40}{4} = 10, \quad     \text{Y方向分块数} = \frac{40}{4} = 10    \]    \[    \text{总分块数} = 10 \times 10 = 100    \]    虽然100不是16的倍数，但 $100 \div 16 = 6 \dots4$，最后一轮仅有4个分块，利用率尚可。
+    
+    \item \textbf{更优解}：若选择分块尺寸使总分块数恰好为16或32等SM倍数，则利用率达到100\%。例如，若矩阵为 $64 \times 64$，分块为 $16 \times 16$，总分块数 $4 \times 4 = 16$，完美匹配16个SM。
+\end{itemize}
+
+\subsection{案例2：非方阵与边界填充}
+\begin{itemize}
+    \item \textbf{矩阵尺寸}：$31 \times N$
+    \item \textbf{问题}：31无法被常见分块尺寸（如16、32）整除。
+    \item \textbf{解决方案}：\textbf{零填充（Zero Padding）}。将矩阵扩展至 $32 \times N$，新增列/行补零。这虽引入少量冗余计算，但保证了内存访问的对齐与分块的规整性，整体收益远大于代价。
+\end{itemize}
+
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.75\linewidth]{resources/cuda-161.png}
+    \caption{}
+    \label{fig:placeholder}
+\end{figure}
+
+\subsection{案例3：分块数与SM不匹配}
+\begin{itemize}
+    \item \textbf{矩阵尺寸}：$40 \times 50$，\textbf{分块尺寸}：$10 \times 10$
+    \item \textbf{分析}：
+    \[    \text{总分块数} = \left(\frac{40}{10}\right) \times \left(\frac{50}{10}\right) = 4 \times 5 = 20    \]    20不是16的倍数。第一轮16个SM满载，第二轮仅剩4个分块，导致12个SM空闲，利用率骤降至25\%。
+    \item \textbf{教训}：即使矩阵维度可被整除，若总分块数不是SM倍数，仍会造成严重的\textbf{尾部效应（Tail Effect）}。
+\end{itemize}
+
+\subsection{案例4：最差场景}
+\begin{itemize}
+    \item \textbf{矩阵尺寸}：$40 \times 41$，\textbf{分块尺寸}：$10 \times 10$
+    \item \textbf{问题叠加}：
+    \begin{enumerate}
+        \item 41无法被10整除，产生不规则边界块（仅1列有效数据）。
+        \item 总分块数 $4 \times 5 = 20$，非SM倍数，SM利用率低。
+    \end{enumerate}
+    此场景同时存在\textbf{内存访问不对齐}与\textbf{计算资源浪费}双重问题，应极力避免。
+\end{itemize}
+
+\subsection{非方形分块的灵活性}
+
+分块不必是正方形。对于 $M \times K$ 与 $K \times N$ 的非方阵，可采用矩形分块以适配维度：
+\begin{itemize}
+    \item 示例：$64 \times 32$ 矩阵，可采用 $16 \times 8$ 分块。
+    \item X方向：$64 / 16 = 4$ 块
+    \item Y方向：$32 / 8 = 4$ 块
+    \item 总分块数：$4 \times 4 = 16$，完美匹配16 SM。
+\end{itemize}
+\noindent \textbf{关键}：只要满足“维度可整除”且“总分块数为SM倍数”两个条件，任意矩形分块均为合法且潜在最优的选择。
+
+\subsection{学习资源推荐}
+
+建议关注 \textbf{NVIDIA GTC (GPU Technology Conference)}大会。该会议每年
+3月举办，涵盖科学计算、AI、大模型、Omniverse及光线追踪等数百场专题讲座。可通过搜索引擎访问\textbf{GTC On-Demand}平台，免费注册后即可观看历年讲座文章与资料，是深入学习GPU并行编程的权威资源。
+
+\subsection{总结与展望}
+
+本章明确了分块策略选择的黄金法则：
+\begin{center}
+    \fbox{\parbox{0.9\textwidth}{\centering
+        \textbf{最优分块} $\Longleftrightarrow$
+        $\begin{cases}
+            \text{矩阵维度} \mod \text{分块尺寸} = 0 \\
+            \text{总分块数} \mod \text{SM数量} = 0
+        \end{cases}$
+    }}
+\end{center}
+
+下一章将转向 \textbf{Tensor Cores（张量核心）}。在Ampere及更新架构中，Tensor Core 执
+行矩阵乘法的性能可达普通 CUDA Core 的\textbf{9倍以上}，已成为现代深度学习与高性能计算中GEMM操作的唯
+一推荐路径。理解普通核心的分块原理，是掌握 Tensor Core 编程的重要基础。
 

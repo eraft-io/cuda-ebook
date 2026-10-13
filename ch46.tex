@@ -1,128 +1,273 @@
-\section{CUDA GPU并行编程：Float4向量化优化矩阵乘法}
+\section{使用共享内存优化矩阵乘法：分块技术}
 
-\subsection{前言与背景回顾}
+\subsection{引言：全局内存的重复读取问题}
 
-在前序章节中，我们讨论了矩阵乘法（GEMM）的分块（Tiling）策略。由于矩阵规模通常远超单个SM的存
-储容量，必须将矩阵分割为若干“小块”（Tile）。若不分块，仅在一个SM上执行计算会导致其他SM闲置，造成硬件资源浪费。
+考察矩阵乘法 $C = A \times B$，其中 $A$、$B$、$C$ 均为方阵。为了计算矩阵 $C$ 中的全部元素，矩阵 $A$ 的第一行需要从全局内存中读取多少次？
 
-\subsection{核心概念辨析}
+回顾矩阵乘法的计算规则：计算 $C_{1,1}$ 需要将 $A$ 的第一行与 $B$ 的第一列做内积；计算 $C_{1,2}$ 需要将 $A$ 的第一行与 $B$ 的第二列做内积；计算 $C_{1,3}$ 需要将 $A$ 的第一行与 $B$ 的第三列做内积。因此，若 $B$ 有三列，则 $A$ 的第一行需要被读取三次。推广到一般情形：若 $B$ 有 100 列，则 $A$ 的第一行需要被读取 100 次。
+
+同一行数据被反复从全局内存加载，构成了矩阵乘法中最典型的性能瓶颈之一。
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.75\linewidth]{resources/cuda-153.png}
+    \caption{}
+    \label{fig:placeholder}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.75\linewidth]{resources/cuda-154.png}
+    \caption{}
+    \label{fig:placeholder}
+\end{figure}
+
+
+\subsection{全局内存与共享内存的延迟对比}
+
+根据第一部分硬件章节中引用的研究数据，各层级存储器的访问延迟大致如下：
+
+\begin{center}
+\begin{tabular}{|l|c|}
+\hline
+\textbf{存储器类型} & \textbf{访问延迟（时钟周期）} \\
+\hline
+全局内存（Global Memory） & 约 300（浮动 $\pm$10--20） \\
+\hline
+共享内存（Shared Memory） & 约 20--22 \\
+\hline
+\end{tabular}
+\end{center}
+
+共享内存的读写延迟比全局内存低一个数量级。当矩阵的某一列包含 $K$ 个元素时，同一行数据将被重复读取 $K$ 次；若数据始终驻留于全局内存，则每次访问均须承担约 300 个周期的延迟，成为整个应用的性能瓶颈。
+
+\subsection{L1 缓存与共享内存的本质差异}
+
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.75\linewidth]{resources/cuda-155.png}
+    \caption{}
+    \label{fig:placeholder}
+\end{figure}
+
+一个自然的问题是：数据从全局内存被加载后，通常会经由 L2、L1 缓存驻留在 SM 附近，L1 缓存的延迟同样较低，为何仍需要使用共享内存？
+
+关键在于\textbf{数据驻留的确定性}。L1 缓存由硬件管理，程序员无法控制其换入换出策略。当多个线程块竞争同一 SM 的 L1 容量时，硬件可能随时驱逐其中的数据。若矩阵 $A$ 的第一行被逐出 L1，后续访问将被迫再次从全局内存加载，重复承担高延迟开销。
+
+共享内存则不同，它属于\textbf{软件控制的内存}：数据的加载与驻留完全由程序显式管理。只要程序员不主动覆盖，数据在整个内核执行期间都保证驻留在共享内存中。因此，对于需要多次重用的数据，使用共享内存可以在\textbf{确定性}的前提下获得低延迟访问。
+
+综上所述，本应用的瓶颈在于：同一行数据被多次从高延迟的全局内存读取；解决方案是将需要重用的数据显式加载到共享内存中，该优化技术称为\textbf{分块（Tiling）}。
+
+\subsection{分块与瓦片的基本概念}
+
+\subsubsection{瓦片的定义}
+
+在矩阵乘法中，矩阵 $C$ 的每个元素都依赖于 $A$ 的\textbf{一整行}与 $B$ 的\textbf{一整列}（区别于向量加法中一个元素对应一个元素）。因此，GPU 并行化的基本策略是：将矩阵 $C$ 划分为若干子区域，每个子区域称为一个\textbf{瓦片（Tile）}，并将每个瓦片分配给一个线程块独立计算。
+
+瓦片大小与瓦片数量是两个不同的概念：例如一个 $3 \times 3$ 的矩阵可划分为 9 个瓦片（瓦片大小为 1）；而在实际应用中，通常将 $C$ 划分为大小为 $16 \times 16$ 的瓦片。瓦片大小的选取受两个因素约束：
+
 \begin{itemize}
-    \item \textbf{小块（Tile）}：指矩阵数据被分割后的逻辑子矩阵。
-    \item \textbf{线程块（Thread Block）}：指CUDA编程模型中的执行单元集合。
+    \item \textbf{共享内存容量}：瓦片对应的 $A$ 行片段与 $B$ 列片段必须能够放入共享内存。
+    \item \textbf{线程数上限}：每个瓦片由 $TILE\_SIZE \times TILE\_SIZE$ 个线程计算，不能超过每个块的线程数上限（1024）。
 \end{itemize}
 
-\textbf{关键映射关系}：C矩阵的一个小块对应一个CUDA线程块。若C矩阵被分为$N$个小块，则需要$N$个线程块
-。每个线程块负责计算C矩阵中对应小块的所有元素。需要注意的是，计算C的一个小块需要循环遍历K维度上所有对应的A和B的小块
-，累加部分和（Partial Sum）才能得到最终结果。
+\subsubsection{网格与线程块配置}
 
-\subsection{优化动机：计算与内存受限}
+以 $N = 512$、$TILE\_SIZE = 16$ 为例：
 
-朴素版本及基础共享内存版本的矩阵乘法同时面临两类瓶颈：
+\begin{itemize}
+    \item \textbf{块大小（Block Size）}：$16 \times 16 = 256$ 个线程，即 X、Y 维度的线程 ID 均从 0 到 15。
+    \item \textbf{网格大小（Grid Size）}：X、Y 维度的块数量均为
+    \[
+    \frac{N + TILE\_SIZE - 1}{TILE\_SIZE} = \frac{512 + 16 - 1}{16} = 32
+    \]
+    即网格为 $32 \times 32$ 个线程块。
+    \item \textbf{总线程数}：$32 \times 32$ 块 $\times$ 256 线程/块 $= 262144 = 512 \times 512$，恰好等于矩阵 $C$ 的元素数，与向量加法中"线程数等于元素数"的原则一致。
+\end{itemize}
+
+\subsubsection{K 维循环累加}
+
+单个瓦片（$16 \times 16$ 区域）的计算需要 $A$ 中对应的 16 个整行与 $B$ 中对应的 16 个整列，每行/列包含 512 个元素。将其按 16 个元素一段划分为 32 个片段（块），则瓦片的计算结果为：
+
+\[
+C_{tile} = \sum_{t=0}^{31} A_{tile,t} \times B_{t,tile}
+\]
+
+其中 $t$ 为片段索引（K 维迭代变量）。以第一个瓦片（块索引 $(0,0)$）为例：
+
+\begin{itemize}
+    \item $t=0$：$A$ 的第 0--15 列片段与 $B$ 的第 0--15 行片段相乘，结果累加到 sum；
+    \item $t=1$：$A$ 的第 16--31 列片段与 $B$ 的第 16--31 行片段相乘，继续累加；
+    \item 依此类推，直至 $t=31$，完成全部 512 个元素的乘加运算。
+\end{itemize}
+
+注意 K 维步长：对 $A$ 而言，相邻片段在 X 维度偏移 16；对 $B$ 而言，相邻片段在 Y 维度偏移 16（对应 X 维度偏移 $16 \times 512$）。因此，需要两层循环：外层遍历 K 维片段（$t$），内层遍历片段内的 16 个元素（$k$）。
+
+\subsection{共享内存实现}
+
+\subsubsection{共享内存数组的声明}
+
+在 CUDA 内核中，共享内存变量使用 \texttt{\_\_shared\_\_} 关键字声明。矩阵 $A$、$B$ 的元素类型为 float，因此声明两个 $TILE\_SIZE \times TILE\_SIZE$ 的二维数组：
+
+\begin{lstlisting}
+__shared__ float s_a[TILE_SIZE][TILE_SIZE];
+__shared__ float s_b[TILE_SIZE][TILE_SIZE];
+\end{lstlisting}
+
+\subsubsection{共享内存容量核算}
+
+以 $TILE\_SIZE = 16$ 为例，共享内存占用为：
+
+\[
+16 \times 16 \times 4\ \text{字节} \times 2\ \text{个数组} / 1024 = 2\ \text{KB}
+\]
+
+该值远小于各架构的共享内存上限（如 RTX 3060 约 96--100 KB，A100 可达 160 KB）。调整 $TILE\_SIZE$ 时须重新核算，确保不超过硬件容量。
+
+\subsubsection{数据加载与索引计算}
+
+在加载共享内存之前，$A$、$B$ 的数据驻留于全局内存（由 \texttt{cudaMemcpy} 从主机复制而来）。每个线程将全局内存中的一个元素复制到共享内存的对应位置。
+
+\begin{itemize}
+    \item \textbf{行索引与列索引}：
+    \begin{lstlisting}
+int row = blockIdx.y * TILE_SIZE + threadIdx.y;
+int col = blockIdx.x * TILE_SIZE + threadIdx.x;
+    \end{lstlisting}
+    行索引使用 Y 维度（块的 Y 索引与线程的 Y ID），列索引使用 X 维度。
+
+    \item \textbf{加载 $A$ 的片段}：
+    \begin{lstlisting}
+s_a[threadIdx.y][threadIdx.x] = a[row * N + t * TILE_SIZE + threadIdx.x];
+    \end{lstlisting}
+    其中 \texttt{row * N} 定位到矩阵 $A$ 的第 row 行（每行 N 个元素）；\texttt{t * TILE\_SIZE} 定位到 K 维第 $t$ 个片段在行内的起始列；\texttt{threadIdx.x} 为片段内偏移（0--15）。
+
+    \item \textbf{加载 $B$ 的片段}：
+    \begin{lstlisting}
+s_b[threadIdx.y][threadIdx.x] = b[(t * TILE_SIZE + threadIdx.y) * N + col];
+    \end{lstlisting}
+    $B$ 的片段沿 Y 维度推进：\texttt{t * TILE\_SIZE + threadIdx.y} 给出片段起始行加行内偏移，乘以 N 后加上列索引 col 完成定位。
+\end{itemize}
+
+\subsubsection{同步与计算}
+
+\begin{itemize}
+    \item \textbf{第一次同步}：加载 $A$、$B$ 的当前片段后，必须调用 \texttt{\_\_syncthreads()}，确保块内所有线程完成加载后才能开始计算，否则部分线程可能读取到尚未写入的共享内存数据。
+    \item \textbf{片段内乘加}：对片段内的 16 个元素执行乘加运算：
+    \begin{lstlisting}
+for (int k = 0; k < TILE_SIZE; k++) {
+    sum += s_a[threadIdx.y][k] * s_b[k][threadIdx.x];
+}
+    \end{lstlisting}
+    \item \textbf{第二次同步}：在进入下一个片段的加载之前再次调用 \texttt{\_\_syncthreads()}，防止某些线程在其余线程完成计算前覆盖共享内存。
+\end{itemize}
+
+全部片段累加完毕后，将结果写回全局内存：
+
+\begin{lstlisting}
+c[row * N + col] = sum;
+\end{lstlisting}
+
+\subsubsection{完整内核代码}
+
+\begin{lstlisting}
+__global__ void matmul_tiled(float* a, float* b, float* c, int n) {
+    __shared__ float s_a[TILE_SIZE][TILE_SIZE];
+    __shared__ float s_b[TILE_SIZE][TILE_SIZE];
+
+    int row = blockIdx.y * TILE_SIZE + threadIdx.y;
+    int col = blockIdx.x * TILE_SIZE + threadIdx.x;
+
+    float sum = 0.0f;
+    int numTiles = N / TILE_SIZE;
+
+    for (int t = 0; t < numTiles; t++) {
+        // 将 A、B 的第 t 个片段从全局内存加载到共享内存
+        s_a[threadIdx.y][threadIdx.x] = a[row * N + t * TILE_SIZE + threadIdx.x];
+        s_b[threadIdx.y][threadIdx.x] = b[(t * TILE_SIZE + threadIdx.y) * N + col];
+
+        __syncthreads();
+
+        // 对当前片段执行乘加运算
+        for (int k = 0; k < TILE_SIZE; k++) {
+            sum += s_a[threadIdx.y][k] * s_b[k][threadIdx.x];
+        }
+
+        __syncthreads();
+    }
+
+    c[row * N + col] = sum;
+}
+\end{lstlisting}
+
+\subsection{常见错误与调试}
+
+在实现过程中容易出现的错误包括：
+
 \begin{enumerate}
-    \item \textbf{计算受限（Compute-bound）}：算术运算指令过多，包括循环控制开销。
-    \item \textbf{内存受限（Memory-bound）}：全局内存带宽不足，访存延迟高。
+    \item \textbf{语法错误}：语句末尾缺少分号、变量（如 \texttt{numTiles}）未声明、常量名大小写不一致（如 \texttt{TILE\_SIZE} 误写为 \texttt{tile\_size}）等。
+    \item \textbf{逻辑错误（关键）}：将片段乘加循环（内层 for 循环）错误地放在片段遍历循环（外层 for 循环）之外。此时程序会先加载完所有片段，再仅对\textbf{最后一个片段}执行乘加，计算结果严重错误。正确的控制流应当是：\textbf{加载一个片段 $\to$ 同步 $\to$ 乘加累加 $\to$ 同步}，如此循环往复，直至遍历完 K 维的所有片段。
 \end{enumerate}
-
-本章介绍的 \texttt{float4} 向量化优化旨在同时改善上述两个问题，使屋顶线模型（Roofline Model）中的性能点向更高算力利用率方向移动。
-
-
-\subsection{优化原理}
-
-\subsection{循环展开（Loop Unrolling）}
-循环展开通过减少循环控制指令（如计数器递增、条件跳转）来降低非计算指令的比例。例如，将大小为16的循环完全展开，可消除1
-6次循环判断开销，直接提升计算密集型任务的性能。
-
-\subsection{向量化加载与预取（Vectorized Load \& Prefetching）}
-利用 \texttt{float4} 数据类型，单条指令即可加载4个连续的浮点数。这相当于一种“内存级循环展开”：
-\begin{itemize}
-    \item \textbf{带宽利用率提升}：一次128-bit内存事务替代四次32-bit事务。
-    \item \textbf{指令数减少}：加载相同数量元素所需的指令数降为原来的1/4。
-\end{itemize}
-
-\subsection{线程配置调整}
-由于采用 \texttt{float4} 加载，X维度的线程需求发生变化：
-\begin{itemize}
-    \item \textbf{原方案}：$16 \times 16$ 小块，X维度需16个线程，每线程加载1个元素。
-    \item \textbf{新方案}：$16 \times 16$ 小块，X维度仅需4个线程，每线程加载4个元素（\texttt{float4}）。
-    \item \textbf{Y维度}：保持不变，仍需16个线程处理16行。
-\end{itemize}
-因此，每个线程块处理的总工作量不变，但活跃线程数减少，单线程工作负载增加。
-
-\subsection{内存布局约束}
-\texttt{float4}要求内存地址连续且对齐。由于矩阵采用行主序（Row-major）存储，同一行的元素在物理内
-存中连续，而跨行元素不连续。因此，\textbf{向量化加载必须沿X维度（列方向）进行}，Y维度保持标量迭代。
-
-\subsection{代码实现要点}
-
-\subsection{累加器声明}
-由于每个线程现在负责C矩阵中的4个元素（同一行相邻4列），需声明4个独立的累加器以消除数据依赖，便于流水线执行：
-\begin{lstlisting}[style=mystyle]
-float sum0 = 0.0f, sum1 = 0.0f, sum2 = 0.0f, sum3 = 0.0f;
-// 或使用数组 float sum[4] = {0};
-\end{lstlisting}
-
-\subsection{全局内存到共享内存的向量化加载}
-加载矩阵A和B时，使用 \texttt{float4} 指针进行类型转换与读取：
-
-\begin{lstlisting}[style=mystyle]
-// 计算全局内存中的float4指针地址
-// threadIdx.x * 4 是因为每个线程负责4列
-const float4* a_ptr = reinterpret_cast<const float4*>(
-    &A[base_offset + row * N + threadIdx.x * 4]
-);
-
-// 从全局内存加载float4到寄存器
-float4 reg_a = *a_ptr;
-
-// 写入共享内存（需注意共享内存布局）
-// 此处可能需要reinterpret_cast以确保地址对齐正确
-reinterpret_cast<float4*>(&SA[shared_offset])[threadIdx.x] = reg_a;
-\end{lstlisting}
-
-\textbf{注意}：全局内存与共享内存的地址空间不同，使用 \texttt{reinterpret\_cast} 是
-为了满足编译器对 \texttt{float4} 对齐的要求，避免警告并确保生成正确的128-bit加载指令（
-如 \texttt{LDG.E.128}）。
-
-\subsection{计算阶段的向量化访问}
-在共享内存中进行乘加运算时，利用 \texttt{float4} 的成员访问语法：
-\begin{lstlisting}[style=mystyle]
-// 假设已从共享内存加载了float4类型的B片段
-float4 reg_b = ...; 
-
-sum0 += SA[...] * reg_b.x;
-sum1 += SA[...] * reg_b.y;
-sum2 += SA[...] * reg_b.z;
-sum3 += SA[...] * reg_b.w;
-\end{lstlisting}
-这种显式展开写法避免了循环依赖，有利于编译器调度指令。
 
 \subsection{性能评估}
 
-在相同硬件环境下，三种实现的执行时间对比如下：
+\subsubsection{与朴素实现的对比}
 
-\begin{table}[h!]
-\centering
-\caption{矩阵乘法优化性能对比}
-\begin{tabular}{lcc}
-\toprule
-\textbf{优化版本} & \textbf{执行时间 ($\mu$s)} & \textbf{相对加速比} \\
-\midrule
-Naive（朴素版） & 360 & 1.0x \\Shared Memory（共享内存版） & 250 & 1.44x \\
-\textbf{Float4 Vectorized（本课优化）} & \textbf{148} & \textbf{2.43x} \\
-\bottomrule
+在 $N = 512$ 时，使用 Nsight Compute 命令行工具测得：
+
+\begin{center}
+\begin{tabular}{|l|c|c|}
+\hline
+\textbf{实现} & \textbf{执行时间（N=512）} & \textbf{执行时间（N=1024）} \\
+\hline
+朴素矩阵乘法（全局内存） & 360 微秒 & 约 3 毫秒 \\
+\hline
+分块矩阵乘法（共享内存） & 约 251 微秒 & 约 2 毫秒 \\
+\hline
 \end{tabular}
-\end{table}
+\end{center}
 
-\textbf{结果分析}：相较于共享内存版本，\texttt{float4}优化进一步减少了约100$\mu$s的执行
-时间。屋顶线分析表明，该优化有效缓解了内存带宽压力，同时将性能点推向了计算与内存平衡的过渡区域（Transition Point），验证了向量化加载对双重瓶颈的改善效果。
+使用共享内存后，执行时间由 360 微秒降至约 251 微秒，性能提升约 30\%--40\%。当矩阵规模增大至 $N = 1024$ 时，同样取得约 33\% 的提升，说明共享内存优化在较大规模下依然有效。
+
+\subsubsection{瓦片大小的选择}
+
+进一步调整 $TILE\_SIZE$ 观察其影响：
+
+\begin{center}
+\begin{tabular}{|l|c|c|c|}
+\hline
+\textbf{TILE\_SIZE} & \textbf{每块线程数} & \textbf{共享内存占用} & \textbf{结果（N=1024）} \\
+\hline
+16 & 256 & 2 KB & 约 2 毫秒（最优） \\
+\hline
+32 & 1024 & 8 KB & 约 2.1 毫秒（略有下降） \\
+\hline
+64 & 4096 & 32 KB & 内核无法执行 \\
+\hline
+\end{tabular}
+\end{center}
+
+\begin{itemize}
+    \item $TILE\_SIZE = 32$ 时，每块线程数为 1024，已达硬件规定的每块线程数上限。由于线程规模过大、占用率受限，执行时间反而略有增加。
+    \item $TILE\_SIZE = 64$ 时，每块线程数为 $64 \times 64 = 4096$，超过 1024 的上限，内核无法启动（Nsight Compute 提示 "No kernels were profiled"）。注意：此限制源于线程数上限，而非共享内存容量（64 瓦片仅需 32 KB，未超出硬件共享内存上限）。
+\end{itemize}
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.75\linewidth]{resources/cuda-156.png}
+    \caption{}
+    \label{fig:placeholder}
+\end{figure}
 
 
 \subsection{总结}
-\begin{enumerate}
-    \item \texttt{float4} 优化的核心是\textbf{向量化内存访问}，而非改变矩阵的存储分配方式。
-    \item 必须严格遵循\textbf{行主序}的内存连续性要求，仅在列方向（X维）应用向量化。
-    \item 线程配置需相应调整：X维度线程数除以4，Y维度不变。
-    \item 配合循环展开与多累加器设计，可同时缓解计算与内存瓶颈。
-    \item 实际编码中需注意类型转换（\texttt{reinterpret\_cast}）以满足对齐要求。
-\end{enumerate}
 
+本节通过分块技术将矩阵乘法中被反复读取的行/列数据显式加载到共享内存，将每元素访问延迟从约 300 个周期降至约 20 个周期，在 $N = 512$ 与 $N = 1024$ 规模下均获得约 30\%--40\% 的性能提升。要点如下：
+
+\begin{enumerate}
+    \item 矩阵乘法的数据重用特性（同一行/列被读取 $K$ 次）使其天然适合共享内存优化。
+    \item 共享内存属于软件控制的内存，数据驻留具有确定性，这是 L1 缓存无法保证的。
+    \item 瓦片大小的选取须同时满足共享内存容量与每块线程数上限（1024）两个约束。
+    \item 分块实现的控制流必须严格遵循"加载 $\to$ 同步 $\to$ 计算 $\to$ 同步"的顺序，任何一环缺失都将导致错误结果。
+\end{enumerate}

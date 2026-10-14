@@ -13,6 +13,14 @@
     \item \textbf{存储（Storing）}：将寄存器中的最终结果写回全局内存中的矩阵C。
 \end{enumerate}
 
+\begin{figure}
+    \centering
+    \includegraphics[width=0.75\linewidth]{resources/cuda-168.png}
+    \caption{}
+    \label{fig:placeholder}
+\end{figure}
+
+
 \subsection{WMMA API 核心概念}
 \subsection{定义与适用架构}
 WMMA 全称为 \textbf{Warp Synchronous Matrix Multiply-Accumulate}。
@@ -25,6 +33,13 @@ WMMA 全称为 \textbf{Warp Synchronous Matrix Multiply-Accumulate}。
 
 \subsection{碎片（Fragments）与数据布局}
 WMMA 引入了“碎片”（Fragment）的概念，即分布在 Warp 内32个线程寄存器中的矩阵子块。
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.75\linewidth]{resources/cuda-169.png}
+    \caption{}
+    \label{fig:placeholder}
+\end{figure}
 
 \subsection{支持的维度与类型}
 WMMA 不支持任意尺寸的分块，必须使用预定义的形状。常见组合包括：
@@ -41,6 +56,7 @@ WMMA 不支持任意尺寸的分块，必须使用预定义的形状。常见组
     \item \textbf{Col-Major}：按列连续存储。
 \end{itemize}
 \textbf{优化提示}：为最大化内存合并访问效率，通常建议矩阵A使用 Col-Major（便于按列加载），矩阵B使用Row-Major（便于按行加载），具体取决于内核的遍历策略。错误的布局会导致非合并访问，显著增加缓存未命中率和内存请求次数。
+
 
 \subsection{WMMA 关键指令}
 \begin{lstlisting}

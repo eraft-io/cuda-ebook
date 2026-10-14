@@ -21,6 +21,158 @@ nvcc -o naive naive.cu
 \end{lstlisting}
 该命令可正常生成可执行文件。
 
+\begin{lstlisting}
+// naive.cu
+#include <stdio.h>
+#include <cuda.h>
+#include <cuda_fp16.h>
+
+#define N 1024
+
+__global__ void matMulCUDA(half *A, half *B, half *C) {
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (row < N && col < N) {
+        half sum = __float2half(0.0f);
+        for (int k = 0; k < N; k++) {
+            sum = __hadd(sum, __hmul(A[row * N + k], B[k * N + col]));
+        }
+        C[row * N + col] = sum;
+    }
+}
+
+void randomMatrix(half *mat, int size) {
+    for (int i = 0; i < size; i++) {
+        mat[i] = __float2half(static_cast<float>(rand()) / RAND_MAX);
+    }
+}
+
+int main() {
+    size_t bytes = N * N * sizeof(half);
+
+    half *h_A, *h_B, *h_C;
+    half *d_A, *d_B, *d_C;
+
+    h_A = (half*)malloc(bytes);
+    h_B = (half*)malloc(bytes);
+    h_C = (half*)malloc(bytes);
+
+    randomMatrix(h_A, N * N);
+    randomMatrix(h_B, N * N);
+
+    cudaMalloc(&d_A, bytes);
+    cudaMalloc(&d_B, bytes);
+    cudaMalloc(&d_C, bytes);
+
+    cudaMemcpy(d_A, h_A, bytes, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B, h_B, bytes, cudaMemcpyHostToDevice);
+
+    dim3 blockSize(16, 16);
+    dim3 gridSize(N / blockSize.x, N / blockSize.y);
+
+    matMulCUDA<<<gridSize, blockSize>>>(d_A, d_B, d_C);
+
+    cudaMemcpy(h_C, d_C, bytes, cudaMemcpyDeviceToHost);
+
+    printf("Matrix multiplication completed using CUDA Cores (FP16).\n");
+
+    cudaFree(d_A);
+    cudaFree(d_B);
+    cudaFree(d_C);
+    free(h_A);
+    free(h_B);
+    free(h_C);
+
+    return 0;
+}
+
+\end{lstlisting}
+
+
+\begin{lstlisting}
+
+// tensor.cu
+#include <stdio.h>
+#include <cuda.h>
+#include <cuda_fp16.h>
+#include <mma.h>
+
+#define N 2048
+#define TILE_SIZE 16 // Using 16x16 matrix tiles
+
+using namespace nvcuda;
+
+__global__ void matMulTensorCores(half *A, half *B, half *C) {
+    int warpM = (blockIdx.x * blockDim.x + threadIdx.x) / warpSize;
+    int warpN = (blockIdx.y * blockDim.y + threadIdx.y);
+
+    if (warpM < N / TILE_SIZE && warpN < N / TILE_SIZE) {
+        wmma::fragment<wmma::matrix_a, TILE_SIZE, TILE_SIZE, TILE_SIZE, half, wmma::row_major> fragA;
+        wmma::fragment<wmma::matrix_b, TILE_SIZE, TILE_SIZE, TILE_SIZE, half, wmma::col_major> fragB;
+        wmma::fragment<wmma::accumulator, TILE_SIZE, TILE_SIZE, TILE_SIZE, half> fragC;
+
+        wmma::fill_fragment(fragC, __float2half(0.0f));
+
+        for (int k = 0; k < N / TILE_SIZE; k++) {
+            wmma::load_matrix_sync(fragA, A + warpM * TILE_SIZE * N + k * TILE_SIZE, N);
+            wmma::load_matrix_sync(fragB, B + k * TILE_SIZE * N + warpN * TILE_SIZE, N);
+            wmma::mma_sync(fragC, fragA, fragB, fragC);
+        }
+
+        wmma::store_matrix_sync(C + warpM * TILE_SIZE * N + warpN * TILE_SIZE, fragC, N, wmma::mem_row_major);
+    }
+}
+
+void randomMatrix(half *mat, int size) {
+    for (int i = 0; i < size; i++) {
+        mat[i] = __float2half(static_cast<float>(rand()) / RAND_MAX);
+    }
+}
+
+int main() {
+    size_t bytes = N * N * sizeof(half);
+
+    half *h_A, *h_B, *h_C;
+    half *d_A, *d_B, *d_C;
+
+    h_A = (half*)malloc(bytes);
+    h_B = (half*)malloc(bytes);
+    h_C = (half*)malloc(bytes);
+
+    randomMatrix(h_A, N * N);
+    randomMatrix(h_B, N * N);
+
+    cudaMalloc(&d_A, bytes);
+    cudaMalloc(&d_B, bytes);
+    cudaMalloc(&d_C, bytes);
+
+    cudaMemcpy(d_A, h_A, bytes, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B, h_B, bytes, cudaMemcpyHostToDevice);
+
+    dim3 blockSize(32, 32);
+    dim3 gridSize(N / TILE_SIZE, N / TILE_SIZE);
+
+    matMulTensorCores<<<gridSize, blockSize>>>(d_A, d_B, d_C);
+
+    cudaMemcpy(h_C, d_C, bytes, cudaMemcpyDeviceToHost);
+
+    printf("Matrix multiplication completed using Tensor Cores (FP16).\n");
+
+    cudaFree(d_A);
+    cudaFree(d_B);
+    cudaFree(d_C);
+    free(h_A);
+    free(h_B);
+    free(h_C);
+
+    return 0;
+}
+
+
+
+\end{lstlisting}
+
 \subsection{张量核心版本编译陷阱}
 若直接使用默认参数编译张量核心版本：
 \begin{lstlisting}
@@ -39,6 +191,13 @@ nvcc -o tensor tensor.cu -arch=sm_80
     \item \textbf{最佳实践}：建议在所有涉及新特性的编译中始终明确指定 \texttt{-arch} 参数，确保编译器启用正确的指令集与内建函数。
 \end{itemize}
 
+\begin{figure}
+    \centering
+    \includegraphics[width=0.75\linewidth]{resources/cuda-167.png}
+    \caption{}
+    \label{fig:placeholder}
+\end{figure}
+
 \subsection{性能评估结果}
 使用 NVIDIA Nsight Compute (\texttt{ncu}) 工具测量内核执行时间，对比结果如下：
 
@@ -49,6 +208,7 @@ nvcc -o tensor tensor.cu -arch=sm_80
     \item \textbf{加速比}：$\frac{2454}{577} \approx 4.25\times$
 \end{itemize}
 注：本测试基于消费级 RTX 3060 显卡。若使用 HPC 专用卡（如 A100），预期加速比可达 7--9 倍。
+
 
 \subsection{规模扩展测试 ($2048 \times 2048$)}
 增大矩阵尺寸以观察性能差异的变化趋势：

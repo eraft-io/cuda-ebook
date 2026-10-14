@@ -114,55 +114,87 @@ delete[] h_input;
 完整的 main 函数代码如下：
 
 \begin{lstlisting}
+#include <iostream>
+#include <cuda_runtime.h>
 
-int main() {
-    int n = 1024 * 1024;
-    size_t size = n * sizeof(float);
-    // allocate a space for the input vector on cpu and gpu
-    float* d_input;
-    float* h_input = new float[n];
-    cudaMalloc(&d_input, size);
+__global__ void reduce_in_place(float* input, int n) {
+    int tid = threadIdx.x;
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
 
-    // initialize the input vector on the host side
-    for (int i = 0; i < n; i++) {
-        h_input[i] = static_cast<float>(i);
+    // Perform in-place reduction within each block
+    for (int stride = 1; stride < blockDim.x; stride *= 2) {
+        __syncthreads();  // Ensure all threads have completed the previous iteration
+
+        if (tid % (2 * stride) == 0 && index + stride < n) {
+            // Perform reduction and store the sum back in place
+            input[index] += input[index + stride];
+        }
     }
 
-    // copy the host data to the device
-    cudaMemcpy(d_input, h_input, size, cudaMemcpyHostToDevice);
+    // Store the block's reduced result in the first position of this block's portion
+    if (tid == 0) {
+        input[blockIdx.x] = input[blockIdx.x * blockDim.x];  // Write the reduced sum for this block
+    }
+}
 
-    // edit the kernel configurations (block size the grid size)
-    int blocksize = 256;
-    int gridsize = (n + blocksize - 1) / blocksize;
-    std::cout << gridsize << std::endl;
+float cpu_reduce(float* input, int size) {
+    float sum = 0.0f;
+    for (int i = 0; i < size; ++i) {
+        sum += input[i];
+    }
+    return sum;
+}
 
-    // execute the cpu function
-    float sum = cpu_reduce(h_input, n);
-    std::cout << sum << std::endl;
+int main() {
+    int n = 1024 * 1024;  // Number of elements
+    size_t bytes = n * sizeof(float);
 
-    // launch the gpu kernel
-    reduce_in_place<<<gridsize, blocksize>>>(d_input, n);
-    cudaDeviceSynchronize();
+    // Host memory allocation
+    float* h_input = new float[n];
+    float* d_input;
 
-    // launch the second kernel
-    reduce_in_place<<<4096 / blocksize, blocksize>>>(d_input, 4096);
-    cudaDeviceSynchronize();
+    // Initialize input array
+    for (int i = 0; i < n; i++) {
+        h_input[i] = static_cast<float>(i + 1);  // Initialize from 1 to n
+    }
 
-    // launch the third kernel
-    reduce_in_place<<<1, blocksize>>>(d_input, 16);
-    cudaDeviceSynchronize();
+    // Device memory allocation
+    cudaMalloc(&d_input, bytes);
 
-    // copy the result from device to host
+    // Copy data from host to device
+    cudaMemcpy(d_input, h_input, bytes, cudaMemcpyHostToDevice);
+
+    // Launch the reduction kernel multiple times
+    int blockSize = 256;  // Number of threads per block
+    int gridSize = (n + blockSize - 1) / blockSize;  // Number of blocks
+    // Calculate the sum using the CPU function for verification
+    float total_sum = cpu_reduce(h_input, 1024 * 1024);
+    std::cout << "Total sum (CPU): " << total_sum << std::endl;
+    // Perform iterative reduction until we have one block left
+    reduce_in_place << <gridSize, blockSize >> > (d_input, n);
+    cudaDeviceSynchronize();  // Ensure kernel execution completes
+    reduce_in_place << <16, blockSize >> > (d_input, 4096);
+    cudaDeviceSynchronize();  // Ensure kernel execution completes
+
+
+    // Final reduction when gridSize is 1
+    reduce_in_place << <1, blockSize >> > (d_input, 16);
+    cudaDeviceSynchronize(); 
+    // Copy the final result back to the host (the sum should be in h_input[0])
     cudaMemcpy(h_input, d_input, sizeof(float), cudaMemcpyDeviceToHost);
 
-    std::cout << "GPU output: " << h_input[0] << std::endl;
+    // Print the result
+    std::cout << "Final sum (GPU): " << h_input[0] << std::endl;
 
-    // free allocated space
+    
+
+    // Free memory
     cudaFree(d_input);
     delete[] h_input;
 
     return 0;
 }
+
 \end{lstlisting}
 
 \subsection{精度差异说明}

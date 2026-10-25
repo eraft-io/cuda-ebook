@@ -1,59 +1,230 @@
 \section{错误检查API详解}
 
-在深入探讨使用 Nsight Compute 工具分析 CUDA 应用之前，需要强调 CUDA 函数中错误检查的重要性。用一个例子来说明这一点。在进行性能分析之前，确保 CUDA 函数运行流畅且准确至关重要。在前文中提到过一个问题，即应用程序编译时没有错误，然而该应用程序却无法正确执行。经过调查，定位到了一个故障的 \texttt{malloc} 函数，原因是用于分配所需存储或所需空间的 RAM 不足。这类错误在编译期间无法检测到，在运行时也可能不会表现为可读的错误。这凸显了为所有 CUDA 函数使用错误检查的必要性。
+在深入使用 Nsight Compute 分析 CUDA 应用之前，必须强调错误检查的重要性。一个常见的误区是：应用程序编译时没有任何错误，就认为它可以正确执行。实际上，很多错误在编译期无法被检测到——例如内存分配失败（RAM 或显存不足）——它们只会在运行时以段错误（Segmentation Fault）或无输出的形式表现出来。正因如此，为每一个 CUDA 函数调用加上错误检查，是写出健壮 CUDA 程序的基本功。
 
-\subsection{内存不足问题分析}
+\subsection{错误码与核心错误处理 API}
 
-这大致可以分为两类：同步错误检查和异步错误检查。CUDA 提供了几种机制来检查其操作或函数的成功与失败。从第一类开始：同步错误检查。在 CUDA 中，像内存分配这样的操作是同步的，这意味着这些操作会阻塞主机代码的执行，直到设备完成操作。大多数 CUDA Runtime API 函数都会返回一个错误代码，这使得错误处理更加直接，因为错误会在操作完成后立即报告。可以通过检查这个错误代码来确定是否发生了错误。
+CUDA Runtime API 使用 \texttt{cudaError\_t} 枚举类型表示函数执行结果。大多数 Runtime API 函数都返回一个 \texttt{cudaError\_t} 值，其中 \texttt{cudaSuccess}（值为 0）表示执行成功，其余枚举值对应各类错误。
 
-现在打开向量加法代码来做一些错误检查测试。这是在添加任何错误检查指令之前，是之前章节的向量加法应用程序。首先需要测试这个应用程序是否工作正常。打开终端，列出第四节文件夹中的所有文件。如所示，有三个文件，而本章将重点关注第 2 个 \texttt{02\_enhanced\_vector.cu}。需要编译和运行，检查编译和执行步骤中是否有任何错误。从编辑器中可以看到，打开的是同一个文件。正如之前讨论的，正在使用 NVCC 编译器。\texttt{nvcc -o} 这是可执行文件的名称。以 CUDA 文件结束命令，编译时没有出现任何错误。现在运行应用程序，执行也没有任何问题。
+CUDA Runtime 提供了四个核心错误处理 API，官方定义于 \href{https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__ERROR.html}{CUDA Runtime API Reference Manual 的 Error Handling 章节}：
 
-回到这里，把这个值，也就是 32 替换成一个更大的值，$1024 \times 25$。增加每个向量中元素总数的原因是为了增加每个向量所需的总存储量，从而在给这个应用程序分配所需空间时制造一个问题。一旦出现问题，就需要通过错误检查来确切地知道问题是什么。在那之前先简化一下，把 20 这个乘数去掉。在编译和运行应用程序之前，用任务管理器检查一下电脑资源。右键点击，然后选择任务管理器。选择性能选项卡，它显示了电脑中的所有资源。从 CPU 开始到 GPU 结束，需要关注的是内存和 GPU。
+\begin{center}
+\begin{tabular}{|p{5.2cm}|p{7.2cm}|}
+\hline
+\textbf{API} & \textbf{功能} \\
+\hline
+\texttt{cudaGetErrorName(error)} & 返回错误码对应的枚举名（如 \texttt{cudaErrorMemoryAllocation}），无法识别时返回 \texttt{"unrecognized error code"} \\
+\hline
+\texttt{cudaGetErrorString(error)} & 返回错误码对应的可读描述（如 \texttt{"out of memory"}），适合直接打印给用户 \\
+\hline
+\texttt{cudaGetLastError()} & 返回本主机线程中最近一次运行时调用产生的错误，\textbf{并将错误重置为 cudaSuccess} \\
+\hline
+\texttt{cudaPeekAtLastError()} & 返回最近一次运行时调用产生的错误，\textbf{但不重置}错误状态 \\
+\hline
+\end{tabular}
+\end{center}
 
-原因是关注内存，因为这里有三条指令要在 RAM 中分配空间，而 RAM 在这里由内存选项卡表示。同时使用 \texttt{cudaMalloc} 函数在 GPU 中分配空间，这就是关注 GPU 的原因。
+两个查询函数的分工很明确：\texttt{cudaGetErrorName} 适合写入日志、便于检索与分类，\texttt{cudaGetErrorString} 适合直接展示给用户阅读。而 \texttt{cudaGetLastError} 与 \texttt{cudaPeekAtLastError} 的区别在于是否\textbf{清空}错误状态——后者只"偷看"而不清除，适合在需要多次检查同一错误的场景使用。官方文档特别提示：这两个函数都可能返回\textbf{之前异步启动}的核函数产生的错误码。
 
-可以注意到 GPU 现在使用了大约 48\% 的资源，内存使用了 2.5 GB。也可以从图表检查这个值。具体来说关注的是专用 GPU 内存，专用 GPU 内存指的是 GPU 内部真实或实际的内存。这是因为录制程序在运行，最后一个选项卡说明这个录制程序使用了硬件加速，硬件加速指的就是 GPU 本身。需要从这里这些步骤查看 GPU 和内存。
+\subsection{同步错误检查}
 
-需要计算每个向量所需的总存储量。这里就是结果，这个数字代表了每个向量中的元素总数。复制这个数字，然后写下结果代表了每个向量中的元素数量。有三个向量，那么现在需要做的是乘以 4。为什么需要乘以 4 呢？因为应该熟悉 C 语言，在 C 语言中整数值使用四字节的存储空间，因为这些元素中的每一个都包含一个整数值。需要乘以 4 来得到每个向量所需的总字节数。但现在想以 GB 为单位计算，而不是字节。然后再除一次转换成 MB，除以 1024 转换成 KB。再进行一次转换变成 GB。如所示，每个向量将使用 4 GB 存储空间。因为有三个向量，所以将使用 12 GB。现在需要再次检查资源，GPU 现在使用了 2.5 GB，当运行这个正常的应用程序时，这个值应该从 2.5 增加到大约 14 或 15 GB。
+CUDA 操作可以大致分为同步与异步两类，错误检查方式随之不同。
 
-来编译。编译时出现了一些警告，需要处理警告，因为它可能在运行时、在执行时造成问题。这不是编译时的问题。现在可以执行，编译已经完成了，但在执行时应用程序可能工作也可能无法正常工作。先关注第一个问题。它指出问题从这里这部分开始。如前所述，第十七行有个问题。读一下警告本身，它说整数转换导致截断。回到应用程序，每当看到截断部分，就应该知道这个值太大了，无法存储在分配的空间里。第十七行有一个整数值，叫做 \texttt{size}，这个变量应该存储乘以 4 字节之后的结果。取 \texttt{size}，它代表这个数字，然后乘以四字节，结果将存储在这个变量中。这里的结果太大了，无法只存储在四字节中，需要超过四字节。这就是为什么需要写 \texttt{long}，而不是 \texttt{int}。然后编译，如所示，现在没有问题或警告了，然后运行。当代码应用程序正在执行时，可以检查专用 GPU 内存，它正从 2.5 增长到 15，大约 14.7 左右，GPU 内存会出现一个峰值。
+像 \texttt{cudaMalloc} 这样的操作是\textbf{同步}的：调用会阻塞主机代码，直到设备完成操作后才返回，因此返回值本身就是本次操作的错误码，检查方式非常直接——在函数返回后立即检查错误码即可：
 
-\subsection{同步错误检查实现}
+\begin{lstlisting}[language=C]
+#include <stdio.h>
+#include <cuda_runtime.h>
 
-现在没有问题，想把应用程序所需的空间增加到一个很大的值。可能会想错误检查在哪里？大到无法装入专用 GPU 内存，甚至共享 GPU 内存。因为如果使用例如 30 GB，那么将用掉全部 24 GB 的专用内存和 6 GB 的共享内存。想增加更多，把这个值乘以 20。如果把这个值乘以 20，那么每个向量需要 80 GB。需要三个向量乘以 80 GB，这个值将大到无法放入 CPU 的 RAM 内存，甚至 GPU 内存。现在编译看看一些其他的警告。如所示，有更多警告。从第十七行开始还是同一行。因为这里的乘法不能以这种方式进行，所有这些值 1024 都是整数。但当乘以另一个 20 时，这个值将无法装入一个整数。也许 \texttt{long} 可以，\texttt{long} 足够了，但它不足以进行乘法运算本身。需要做的是复制这部分，并定义一个空间足够的变量。写 \texttt{long}，但因为 \texttt{long} 可能还不够，所以再写一个 \texttt{long}，以确保分配超过八字节。然后写等于，加上 \texttt{LL}。因为如果去掉这个 \texttt{LL}，那么就是在整数乘整数乘整数，结果应该是 \texttt{long}。这里的 \texttt{L} 指的是需要对 \texttt{long} 值进行乘法，而不是整数。但如果乘两个值，在最终值存储到这个 \texttt{size} 之前，它不足以存储在整数值中。这就是为什么如果看警告，会在其他指令上也有警告。比如第 28 行，看 for 循环，不能在这里乘这些值，因为它们现在被定义为整数。当写 \texttt{LL} 时，意味着是在乘 \texttt{long} 值，而不是整数值。然后编译并运行。
+int main() {
+    const int N = 32;
+    size_t bytes = N * sizeof(int);
 
-如所示，遇到了段错误。在这种情况下，知道问题所在，这个应用程序需要的空间超过了 CPU 的 RAM 和 GPU 专用内存的可用空间。但如果有一个应用程序在输出中给出了段错误，但不知道所需空间，这就是为什么需要错误检查。需要为这三个函数，也就是 \texttt{cudaMalloc} 内存分配函数添加一些错误检查。复制指令，为这三个函数放在这里。顺便说一下，需要对 \texttt{cudaMemcpy}、\texttt{cudaEventRecord}、核函数启动等做同样的事情，这里只是把这些作为例子。这只是错误对象的声明，这个对象将用于存储每个 CUDA 函数的错误。这就是为什么这个变量或对象的类型是 \texttt{cudaError\_t}，这是 CUDA 编程中的另一种结构。需要再次写上 \texttt{error =}。如前所述，每个 CUDA 函数都会提供一个错误。这个错误随后可以被检查，以确切地知道执行这个函数的问题是什么。取这个函数的输出，并将其存储在错误对象中，然后测试这个错误是否不是 \texttt{cudaSuccess}。如果不是成功，那么就有问题。需要打印这个错误。如所示，使用了 \texttt{fprintf}，但这里的错误值不是字符串值，它更像是 ID 号之类的东西。使用另一个 CUDA API 函数叫做 \texttt{cudaGetErrorString}，它接收错误 ID 并返回对应于该 ID 的字符串。这就是为什么对所有 CUDA 函数重复相同操作，并且应该对此应用程序中的其他 CUDA 函数做同样的事。
+    int *d_a;
+    cudaError_t err = cudaMalloc(&d_a, bytes);
+    if (err != cudaSuccess) {
+        fprintf(stderr, "cudaMalloc failed: %s (%s)\n",
+                cudaGetErrorString(err), cudaGetErrorName(err));
+        return 1;
+    }
 
-现在保存、编译和运行。同样的问题，没有从添加到应用程序的错误检查指令中得到任何指示。原因是如果在为 GPU 内存分配之前，先为主机内存分配了空间——\texttt{malloc} 和 \texttt{cudaMalloc}——输出中的段错误出现在 \texttt{malloc} 这里，而不是 \texttt{cudaMalloc}。而且没有为 \texttt{malloc} 做错误检查。需要把这些指令向下移动。现在在为 CPU 或主机的 RAM 分配空间之前，先在 GPU 中分配空间。在这种情况下，如果 \texttt{cudaMalloc} 无法在 GPU 中分配所需空间，应该能看到错误检查的输出。
+    cudaFree(d_a);
+    return 0;
+}
+\end{lstlisting}
 
-编译并运行，在运行时看看 GPU 资源会发生什么。如所示，可以检查专用值。因为需要 80 GB，编译器现在正尝试分配全部的 24 GB 专用 GPU 内存，然后尝试增加共享 GPU 内存。编译器正尝试分配第一个向量的空间。但这两者都不够，所以会看到一些峰值，它尝试然后失败，如此反复。最终编译器会说"无法为第一个向量分配空间"，它会为第二个向量 B 和第三个向量 C 做同样的事。从这部分可以看到，"未能分配设备内存不足"，这是这条指令的结果。分配内存失败原因就是内存不足。一旦完成了 GPU 的分配，无论是成功还是失败，将使用这些指令为主机端分配空间。没有足够的空间来分配所需的存储，这些指令也应该会失败，这就是为什么也有一个段错误。但在尝试先在 GPU 中分配之后，这就是它的重要性。这就是错误检查在 CUDA 应用程序中的使用方式，它给出一些指示，确切地指出问题在哪里。特别是如果有一个由他人设计的应用程序，而正试图开发或增强它，错误检查就是这样工作的。
-
-回顾本章开头提到的内容，错误检查有两类：同步和异步错误检查。对于同步错误检查，GPU 任务、GPU 函数或 GPU 操作会阻塞主机执行任何其他指令，直到 GPU 任务完成其执行。它将在这里被阻塞，直到 \texttt{cudaMalloc} 完成其执行。例如，如果编译器执行到这里的第 27 行，那么它将停在这里。在执行中编译器将尝试为向量 A 分配空间，但它不会在完成向量 A 的分配之前尝试为向量 B 分配。完成向量 A 的分配，然后进入向量 B 的下一步，无论失败还是成功都没问题。一旦完成向量 B 进入第三步，以此类推。正如所示，现在正尝试为向量 B 分配。完成了向量 A 的步骤，它失败了，但没问题。这就是同步操作的含义。这就是为同步操作使用错误检查的方式：一个错误对象使用这条指令，然后读取同步函数的输出，然后检查该错误是成功还是失败。如果操作失败，那么需要打印错误。
+这段代码声明一个 \texttt{cudaError\_t} 对象存储函数的返回值，检查它是否等于 \texttt{cudaSuccess}，失败时通过 \texttt{cudaGetErrorString} 与 \texttt{cudaGetErrorName} 打印可读的错误信息。\texttt{cudaMemcpy}、\texttt{cudaEventRecord}、\texttt{cudaFree} 等同步 API 都应采用相同的模式。
 
 \subsection{异步错误检查}
 
-\begin{figure}
+核函数启动与同步操作不同：\texttt{<<< >>>} 启动语法\textbf{不返回错误码}，且主机代码不会等待核函数执行完成，而是继续执行下一条指令。如果不调用 \texttt{cudaDeviceSynchronize}，随后的 \texttt{cudaMemcpy} 可能在核函数执行完成之前就尝试复制结果，得到未定义的行为。
+
+异步操作的错误会被记录在 CUDA Runtime 的状态中，需要主动查询。标准做法是：核函数启动之后立即用 \texttt{cudaGetLastError} 检查\textbf{启动配置类}错误（如网格维度非法、核函数不存在），同步之后再次检查\textbf{执行期}错误：
+
+\begin{lstlisting}[language=C]
+// 启动核函数（此调用本身不返回错误码）
+vector_add<<<grid, block>>>(d_a, d_b, d_c, N);
+
+// 1. 立即检查启动配置类错误
+cudaError_t err = cudaGetLastError();
+if (err != cudaSuccess) {
+    fprintf(stderr, "Kernel launch failed: %s\n",
+            cudaGetErrorString(err));
+    return 1;
+}
+
+// 2. 同步后检查执行期错误
+cudaDeviceSynchronize();
+err = cudaGetLastError();
+if (err != cudaSuccess) {
+    fprintf(stderr, "Kernel execution failed: %s\n",
+            cudaGetErrorString(err));
+    return 1;
+}
+\end{lstlisting}
+
+这里有一个容易忽略的细节：\texttt{cudaGetLastError} 在读取后会\textbf{重置}错误状态。如果在同步之前已经调用过它，同步之后就会得到 \texttt{cudaSuccess}，掩盖掉真正的执行期错误。若希望在不清除状态的情况下先查看错误，应使用 \texttt{cudaPeekAtLastError}。
+
+\subsection{实战案例：内存不足与整数溢出}
+
+下面用一个真实场景说明错误检查如何定位问题。将向量加法的元素数量从 32 提升到 $1024 \times 1024 \times 1024$（每个向量约 4~GB，三个向量合计约 12~GB）。首次编译时出现警告：
+
+\begin{figure}[H]
     \centering
     \includegraphics[width=0.75\linewidth]{resources/cuda-100.png}
-    \caption{}
-    \label{fig:placeholder}
+    \caption{将向量长度放大至 $1024^3$ 后，编译器对 \texttt{int} 类型变量发出截断警告（warning \#69-D）：\texttt{int size = 1024*1024*1024 * sizeof(int);} 的乘积超出 32 位整数范围}
+    \label{fig:ch28-truncation-warning}
 \end{figure}
 
-然而异步类型不同，因为异步类型在这里有 CUDA 启动函数代表，不会阻塞主机端或 CPU 执行下一条指令。这就是为什么如果不在这里放一个 \texttt{cudaDeviceSynchronize} 函数，执行 \texttt{cudaMemcpy}，可能会在执行完成之前复制结果。因为编译器不会停在这里，编译器将启动 GPU 核函数，然后进入下一条指令，这与在 \texttt{cudaMalloc} 函数中发生的情况不同。这就是为什么有不同的方法来检查异步操作的错误。这样做的方式就是使用一个叫做 \texttt{cudaGetLastError} 的函数。需要写一些像那样的东西，复制并把它放在这里。如所示，并不直接来到 GPU 任务本身写 \texttt{error = CUDA 函数} 或 \texttt{CUDA 启动}，不像之前做的那样。为什么？因为编译器不会停在这里，直到这个函数完成并返回一个错误存储在这里，它不会停在这里。这就是为什么不需要存储核函数执行的输出。相反，使用 \texttt{cudaGetLastError} 这个 CUDA Runtime API 函数。需要获取最后一个错误，它将存储在内存中的某个地方。而这个错误应该是 GPU 执行的最后一个函数的错误，在这种情况下就是向量加法函数。有两种不同的方法来处理这两类错误。同步错误，使用上面的方法；异步错误，使用 \texttt{cudaGetLastError} 方法。
+第 17 行定义的 \texttt{int size} 需要存储元素数与 4 字节的乘积，而乘积 $2^{32}$ 恰好超出 \texttt{int} 的表示范围，发生整数截断（truncation）。修复方法是将类型改为 64 位的 \texttt{long}。然而仅改类型并不足够：
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\linewidth]{resources/cuda-101.png}
+    \caption{改用 \texttt{long} 后仍出现整数溢出警告：字面量 \texttt{1024*1024*1024} 仍按 \texttt{int} 类型运算，需在字面量后追加 \texttt{LL} 后缀强制按 64 位运算}
+    \label{fig:ch28-overflow-warning}
+\end{figure}
+
+警告信息 "integer overflow in expression of type 'int'" 表明，\texttt{1024*1024*1024*sizeof(int)} 中所有操作数都是 \texttt{int}，乘法在存入 \texttt{size} \textbf{之前}就按 32 位计算并溢出。正确写法是在字面量后追加 \texttt{LL} 后缀，让乘法按 \texttt{long long} 类型进行：
+
+\begin{lstlisting}[language=C]
+long long size = 1024LL * 1024LL * 1024LL * sizeof(int);
+\end{lstlisting}
+
+继续将规模乘以 20（每个向量约 80~GB，三个向量约 240~GB）后运行程序，出现段错误。此时主机端 \texttt{malloc} 与设备端 \texttt{cudaMalloc} 都有可能失败，但程序没有任何可读的报错信息——这正是缺少错误检查的后果。
+
+为三个 \texttt{cudaMalloc} 调用添加错误检查后重新运行，输出依然只是段错误。原因在于：主机端 \texttt{malloc} 先于 \texttt{cudaMalloc} 执行并首先失败，而 \texttt{malloc} 没有经过任何错误检查。把设备端分配\textbf{前移}到主机端分配之前后，\texttt{cudaMalloc} 首先尝试分配 80~GB 显存：它先耗尽全部 24~GB 专用 GPU 内存，再尝试使用共享内存，最终失败并输出 "GPUAssert: out of memory"——错误检查成功地把问题精确定位到了第一个失败的分配调用上。
+
+这个案例说明两点：其一，分配失败类的错误编译期无法察觉，只能依靠运行时错误检查；其二，错误检查的顺序应与资源分配的依赖顺序一致，否则最先失败的操作会把报错机会留给未受检查的代码。
 
 \subsection{错误检查宏封装}
 
-\begin{figure}
-    \centering
-    \includegraphics[width=0.75\linewidth]{resources/cuda-101.png}
-    \caption{}
-    \label{fig:placeholder}
-\end{figure}
+逐行重复"声明错误对象、调用、比较、打印"三条指令会使代码冗长不堪。对于每个 CUDA 函数都执行错误检查的应用程序，这些指令会出现十几次甚至几十次。合理的做法是把它们封装成宏：
 
-这里提一下，这三条指令在代码中重复了很多次。如所示，这里有这三条指令，这里也是同样的三条指令，这里也有。如果对所有 CUDA 函数使用错误检查，应该会看到它们在 \texttt{cudaMemcpy} 这里这两条函数以及 \texttt{cudaEventRecord}、用于输出的 \texttt{cudaMemcpy} 等等。这三条指令将在应用程序中重复多次，而没有必要。可以复制这部分，展示如何做到这一点。需要把这三条指令放在一个宏或一个函数里，然后在需要的时候调用它。如所示，有几行中有两个部分。第一部分是定义一个名为 \texttt{CUDA\_CHECK\_ERROR} 的宏。这个宏调用了一个名为 \texttt{cudaAssert} 的函数。\texttt{cudaAssert} 是一个函数，如所示，它接收一个来自 CUDA Runtime API 函数的错误作为输入，接收执行一个 CUDA 函数后返回的错误，然后检查错误是成功还是失败。如果成功，那么什么都不做。如果不成功，如所示，需要打印错误。但如果看这里的第一个关键字，会发现它叫做 \texttt{inline}。\texttt{inline} 指的是将这些指令内联到另一个代码中。这里不是一个分支，不是另一个函数，只是组织一下。需要复制 \texttt{CUDA\_CHECK\_ERROR}，并把它放在需要的地方。每当看到 \texttt{CUDA\_CHECK\_ERROR} 时，就是在调用 \texttt{cudaAssert}。而当调用 \texttt{cudaAssert} 时，并不是在执行另一个函数，只是复制这些指令，并把它们放在看到 \texttt{CUDA\_CHECK\_ERROR} 的任何地方。
+\begin{lstlisting}[language=C]
+#include <stdio.h>
+#include <stdlib.h>
+#include <cuda_runtime.h>
 
-编译并运行。不打算对所有函数都这样做，只是做一个示例。现在会看到区别，编译器正在尝试为第一个向量分配空间。看输出。如所示，看到一个叫做"GPUAssert: Out of memory"的输出，这发生在第 37 行。这就是在输出中看到的 GPUAssert。有 \texttt{\%s}，它对应错误本身，这就是为什么这里有错误本身，也就是内存不足分配。然后有文件名，也就是 \texttt{02\_enhanced\_vector.cu}。然后有行号，也就是 37。去看看 37 行，正确。但是为什么在这种情况下，没有看到三次向量 B 和向量 C 的失败？只看到向量 A 失败。因为如果看这里的 \texttt{cudaAssert}，会看到使用了 \texttt{exit}。这是因为如果无法为向量 A 分配空间，在没有足够空间的情况下，为什么要继续执行过程呢？需要退出，不需要执行那些不能正常工作的东西。在后续项目中，将使用这种错误检查方法，但不会再解释。这就是为什么需要按顺序观看所有章节。因为在每个章节中，都建立在之前解释的内容之上。
+// 错误检查函数：检查错误码，失败则打印并退出
+__host__ inline void cudaAssert(cudaError_t code,
+                                const char *file, int line) {
+    if (code != cudaSuccess) {
+        fprintf(stderr, "GPUAssert: %s (%s) %s:%d\n",
+                cudaGetErrorString(code),
+                cudaGetErrorName(code),
+                file, line);
+        exit(code);
+    }
+}
 
-可以为异步操作做同样的事。复制这部分，来到这里。这是用于同步 CUDA 操作的，这是用于异步 CUDA 操作的。可以注意到区别，这里的 \texttt{cudaGetLastError} 函数在同步类别中没有。需要复制宏和 \texttt{cudaKernelAssert} 的定义。复制宏名，然后到这里用于核函数启动，但不需要写类似于 \texttt{error = 某物} 的东西，因为编译器不会停在这里。在完成之后，需要写一些类似那样的东西。在编译之前，把这个值减小到比如 32，以确保它在没有任何问题的情况下运行。现在执行完成没有任何问题。
+// 同步操作：传入函数返回值
+#define CUDA_CHECK_ERROR(val) \
+    cudaAssert((val), __FILE__, __LINE__)
 
-以上就是关于错误检查的全部内容。通过本章的内容，应该理解了错误检查的重要性，以及如何将其用于不同的代码函数。在后续项目中，将使用错误检查而不再进行解释。
+// 异步操作：核函数启动后查询最近错误
+#define CUDA_CHECK_KERNEL() \
+    cudaAssert(cudaGetLastError(), __FILE__, __LINE__)
+
+int main() {
+    const int N = 32;
+    size_t bytes = N * sizeof(int);
+
+    int *h_a, *h_b, *h_c, *d_a, *d_b, *d_c;
+    h_a = (int *)malloc(bytes);
+    h_b = (int *)malloc(bytes);
+    h_c = (int *)malloc(bytes);
+
+    CUDA_CHECK_ERROR(cudaMalloc(&d_a, bytes));
+    CUDA_CHECK_ERROR(cudaMalloc(&d_b, bytes));
+    CUDA_CHECK_ERROR(cudaMalloc(&d_c, bytes));
+
+    CUDA_CHECK_ERROR(cudaMemcpy(d_a, h_a, bytes,
+                                cudaMemcpyHostToDevice));
+    CUDA_CHECK_ERROR(cudaMemcpy(d_b, h_b, bytes,
+                                cudaMemcpyHostToDevice));
+
+    vector_add<<<1, N>>>(d_a, d_b, d_c, N);
+    CUDA_CHECK_KERNEL();
+    CUDA_CHECK_ERROR(cudaDeviceSynchronize());
+
+    CUDA_CHECK_ERROR(cudaMemcpy(h_c, d_c, bytes,
+                                cudaMemcpyDeviceToHost));
+
+    CUDA_CHECK_ERROR(cudaFree(d_a));
+    CUDA_CHECK_ERROR(cudaFree(d_b));
+    CUDA_CHECK_ERROR(cudaFree(d_c));
+
+    free(h_a); free(h_b); free(h_c);
+    return 0;
+}
+\end{lstlisting}
+
+宏的要点如下：
+
+\begin{itemize}
+    \item \texttt{CUDA\_CHECK\_ERROR} 直接展开为对 \texttt{cudaAssert} 的调用，将函数返回值、文件名（\texttt{\_\_FILE\_\_}）与行号（\texttt{\_\_LINE\_\_}）一并传入，失败输出形如 \texttt{GPUAssert: out of memory (cudaErrorMemoryAllocation) 02\_vecadd\_enhanced.cu:37} 的信息。
+    \item \texttt{cudaAssert} 声明为 \texttt{\_\_host\_\_ inline}：\texttt{inline} 表示指令会在调用处内联展开，不引入额外的函数调用开销；\texttt{\_\_host\_\_} 指明它运行在主机端。
+    \item 失败后调用 \texttt{exit} 直接终止程序。既然内存分配已经失败，继续执行后续指令毫无意义，立即退出可以避免级联错误和难以解读的输出。
+    \item 异步核函数启动没有返回值，因此提供独立的 \texttt{CUDA\_CHECK\_KERNEL} 宏，在启动语句之后调用 \texttt{cudaGetLastError} 检查最近错误。
+\end{itemize}
+
+\subsection{常见错误码速查}
+
+日常开发中经常遇到的错误码如下（完整列表见 CUDA 头文件 \texttt{driver\_types.h} 与官方文档）：
+
+\begin{center}
+\begin{tabular}{|p{5.4cm}|p{7cm}|}
+\hline
+\textbf{错误码} & \textbf{含义} \\
+\hline
+\texttt{cudaSuccess}（0） & 执行成功 \\
+\hline
+\texttt{cudaErrorMemoryAllocation} & 设备端内存分配失败（out of memory） \\
+\hline
+\texttt{cudaErrorInvalidValue} & 传入参数值无效 \\
+\hline
+\texttt{cudaErrorInvalidDevicePointer} & 使用了无效的设备指针 \\
+\hline
+\texttt{cudaErrorInvalidConfiguration} & 核函数启动配置非法（网格/块维度超限） \\
+\hline
+\texttt{cudaErrorLaunchFailure} & 核函数启动或执行失败 \\
+\hline
+\texttt{cudaErrorIllegalAddress} & 核函数访问了非法内存地址（越界） \\
+\hline
+\texttt{cudaErrorNoDevice} & 未检测到可用的 CUDA 设备 \\
+\hline
+\end{tabular}
+\end{center}
+
+其中 \texttt{cudaErrorIllegalAddress} 在调试阶段尤其常见，它通常意味着核函数中的数组访问越界，配合错误检查可以快速锁定出错的核函数。
+
+\subsection{本章小结}
+
+\begin{itemize}
+    \item 编译通过不代表运行正确，内存分配失败等错误只能在运行时暴露，必须为每个 CUDA 调用添加错误检查。
+    \item 同步操作直接检查返回值；异步操作在启动后与同步后分别用 \texttt{cudaGetLastError} 检查，注意其\textbf{重置}语义与 \texttt{cudaPeekAtLastError} 的区别。
+    \item \texttt{cudaGetErrorString} 与 \texttt{cudaGetErrorName} 将错误码转换为可读文本，是错误输出的标准组合。
+    \item 通过 \texttt{CUDA\_CHECK\_ERROR} / \texttt{CUDA\_CHECK\_KERNEL} 宏封装可消除重复代码，失败时打印文件名与行号并立即退出。
+    \item 后续章节的所有示例代码都将采用这套错误检查模式，不再重复解释。
+\end{itemize}

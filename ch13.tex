@@ -49,7 +49,7 @@ CUDA 工具包还提供了运行时 API（Runtime API），用于管理设备初
 \begin{itemize}
     \item \textbf{Nsight Systems} 和 \textbf{Nsight Compute}：用于分析和剖析应用程序的性能。
     \item \textbf{cuda-gdb}：提供在 Linux 和 macOS 操作系统上调试 CUDA 应用程序的强大环境。
-    \item \textbf{cuda-memcheck}：专门用于检测和诊断内存问题的工具。
+    \item \textbf{Compute Sanitizer}：功能正确性检查工具集（含 \texttt{memcheck}、\texttt{racecheck}、\texttt{initcheck}、\texttt{synccheck} 四个子工具），用于检测内存错误与数据竞争，是早期工具 \texttt{cuda-memcheck} 的继任者。
 \end{itemize}
 所有这些工具共同提供了一个全面的环境，不仅用于编写代码，还用于完善和优化 GPU 加速应用程序。
 

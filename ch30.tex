@@ -1,263 +1,197 @@
 \section{图形化Nsight Compute使用}
 
-在前文中，讨论了 Nsight Compute 工具的命令行分析。其中提到有两种方法来分析任何 CUDA 应用程序。第一种是使用命令行分析，前文已经讨论过了，其中讨论的一些分析内容是本节所需要的。第二种方法是使用 Nsight Compute 工具的图形用户界面，这就是本章的主要内容。将探索 Nsight Compute 的图形界面，即 GUI。照例，这是文档链接。需要说明的是，有两份文档，不是一份。一份是关于 Nsight Compute 工具图形界面的；另一份是关于命令行分析的。
+前文讨论了 Nsight Compute 的命令行分析。Nsight Compute 提供两种分析方法：命令行分析（CLI）适合脚本化、快速收集少数指标；图形界面分析（GUI）提供屋顶线图（Roofline）、可视化图表与每个硬件单元的利用率，适合深入诊断。本章介绍 GUI 的使用。需要说明的是，Nsight Compute 有两份官方文档：一份是 \href{https://docs.nvidia.com/nsight-compute/NsightCompute/index.html}{图形界面用户指南}，另一份是 \href{https://docs.nvidia.com/nsight-compute/NsightComputeCli/index.html}{命令行用户指南}，本章以前者为准。
 
-\subsection{安装与项目创建}
+\subsection{安装与启动}
 
-当打开一个新项目时，需要编辑一些配置，以便能够对 CUDA 应用程序进行性能分析。完成初始步骤后，需要查看输出。但在那之前，需要确保系统上已经安装了这个工具，无论使用的是 Linux 还是 Windows 操作系统。如果系统上没有安装 Nsight Compute 工具，安装起来非常简单。
+Nsight Compute 随 CUDA Toolkit 一并发布，也可从 NVIDIA 开发者网站独立下载。在 \href{https://developer.nvidia.com/tools-overview/nsight-compute/get-started}{Nsight Compute 下载页}可选择 Windows、Linux、macOS、Arm Server 等平台的最新版本（如 2024.3），如图~\ref{fig:ch30-download} 所示。安装完成后启动工具，首先呈现的是启动界面。
 
-当安装 CUDA 时，CUDA 工具包包含了所有内部工具，例如 Nsight Compute 或 Nsight Systems 等。搜索 "Nsight Compute tool for Windows"，打开第一个链接，点击这里。它可能会要求在 NVIDIA 网站注册，可以使用任何电子邮箱进行注册。注册后，会看到这个网页，可以从这个链接下载 Nsight Compute。安装过程非常简单。然后搜索 Nsight Compute，打开工具。
-
-\begin{figure}
+\begin{figure}[H]
     \centering
     \includegraphics[width=0.75\linewidth]{resources/cuda-105.png}
-    \caption{}
-    \label{fig:placeholder}
+    \caption{Nsight Compute 官方下载页：提供 Windows/Linux/macOS/Arm Server 等平台安装包，也可作为 CUDA Toolkit 的一部分获取}
+    \label{fig:ch30-download}
 \end{figure}
 
-这里有两个版本，一个是 24.11，第二个是 24.3.2。将打开这个版本。
+启动界面提供四个入口，如图~\ref{fig:ch30-start} 所示：\textbf{Start Activity}（启动新的分析活动）、\textbf{Open File}（打开已保存的报告）、\textbf{New Project}（创建新项目）、\textbf{Load Project}（加载已有项目）。此外还有 Explore 区域展示版本更新要点。
 
-它是这样启动的，有一些选项，可以打开一个文件、创建一个新项目，或者加载一个已有的项目。这些是 Nsight Compute 图形界面最近的一些增强功能。
-
-需要做的只是从文件菜单打开一个新项目。但在那之前，需要知道 CUDA 应用程序的确切位置。这是 CUDA 课程的文件夹，这是第四节的文件夹。如所示，这里有一些 CUDA 应用程序，还有可执行文件。但在那之前先编译这个 CUDA 应用程序，输入 \texttt{ls}。
-
-有一些 \texttt{.cu} 文件，还有之前章节生成的可执行文件。但今天需要做的是生成带 \texttt{.exe} 扩展名的可执行文件。使用 NVCC 编译器，写例如 \texttt{-o}，这是为了保存编译过程的输出。随便起个名字，例如就叫 \texttt{aa.exe}。
-
-这是可执行文件，这是 CUDA 文件。这个命令会生成这个可执行文件。如所示，这里还没有这个可执行文件。按回车键，然后输入 \texttt{ls}。如所示，这里有了可执行文件。然后回到这里，点击新项目，给它起个名字，点击确定，这里就是配置项。只解释主要的几个。例如这个选项是必须的，这是应用程序可执行文件，已经用这个命令生成了，从这里选择。
-
-复制路径，选择 \texttt{aa.exe} 文件打开。如所示，感叹号被移除了。然后可能需要选择工作目录，例如选择第四节文件夹。
-
-从这里开始有一些配置，比如说是否想启用 CPU 调用栈？是否想启用对 CPU 和 GPU 通信的性能分析过程？如何处理缓存？需要在时钟控制中刷新它们全部。刷新的意思是清除先前存在于缓存中的所有内容。
-
-需要使用基础频率还是无基础？这将指 GPU 的基础时钟频率。对于图分析需要使用节点 1。如果想了解更多，可以从这里查阅文档。
-
-如果现在点击立即启动，它是不会工作的。因为需要开始执行这个应用程序，才能对其进行分析。将添加附加（Attach），可以看到进程名，这里没有任何进程，可以通过这个命令来做到。需要来到这里并开始执行，以便从 CPU 到 GPU 创建一个新进程。
-
-这个命令叫做 \texttt{ncu}。将使用的模式是 \texttt{--launch-mode attach}，然后是 \texttt{./aa.exe}。
-
-那个模式意味着需要让 GPU 开始执行，但它不应该结束。因为需要分析，需要一个正在运行的进程。当按回车键时，例如 \texttt{./aa}，如所示它执行了。但当使用这个命令时，它只是启动了一个进程，消耗了大约 8.2 毫秒。可以通过点击这里的附加来完成。现在可以将这个进程附加到 Nsight Compute UI。
-
-如所示，\texttt{aa.exe} 可以显示在这里，这是进程 ID。先按 Ctrl+C 取消，然后来到这里。
-
-点击附加，再点击这个。需要将参数改为对应的值，因为这是今天的应用程序。点击这个，然后点击附加。现在可以附加了，或者可以来到这里点击启动，如所示一切运行正常。现在需要看看左侧有什么。但它现在是空的，因为还没有开始性能分析。
-
-\begin{figure}
+\begin{figure}[H]
     \centering
     \includegraphics[width=0.75\linewidth]{resources/cuda-106.png}
-    \caption{}
-    \label{fig:placeholder}
+    \caption{Nsight Compute GUI 启动界面：Start Activity / Open File / New Project / Load Project 四个入口，以及 Explore 中的版本更新说明}
+    \label{fig:ch30-start}
 \end{figure}
 
+\subsection{Start Activity 配置}
 
-\subsection{附加进程与指标选择}
+点击 Start Activity 后弹出配置对话框，如图~\ref{fig:ch30-startactivity} 所示，主要配置项包括：
 
-在下面的标签页中，可以看到一个叫"指标选择"、"API 统计"的标签页。只是附加到了进程，但还没有开始分析本身。如何开始分析呢？在指标选择中，可以选择任何想要分析的项目，即需要分析哪些指标，需要做哪些性能分析。
+\begin{itemize}
+    \item \textbf{Target Platform}：选择目标平台（Linux x86\_64、Windows 等）。
+    \item \textbf{Activity}：选择活动类型——\texttt{Profile}（非交互式采集）、\texttt{Interactive Profile}（交互式分析）、\texttt{Occupancy Calculator}（占用率计算器）、\texttt{System Trace}（系统级追踪）。
+    \item \textbf{Connection}：连接方式，\texttt{localhost} 为本地，也可远程连接。
+    \item \textbf{Launch / Attach}：Launch 模式由工具直接启动目标程序；Attach 模式附加到已运行进程。Interactive Profile 需用 Launch 模式。
+    \item \textbf{Application Executable / Working Directory / Command Line Arguments / Environment}：指定可执行文件路径、工作目录、命令行参数与环境变量。
+    \item \textbf{Enable CPU Call Stack}：采集 CPU 调用栈，定位核函数的发起位置。
+    \item \textbf{Enable NVTX Support}：启用 NVTX 标注范围过滤。
+    \item \textbf{Cache Control}：\texttt{Flush All}（默认）在每次重放前清空 GPU 缓存，保证指标可重复；\texttt{None} 不清缓存，更快但指标可能不一致。
+    \item \textbf{Clock Control}：\texttt{Base} 使用基础时钟频率；\texttt{None} 不锁定频率。
+    \item \textbf{Graph Profiling}：CUDA Graph 分析模式（Node 级等）。
+    \item \textbf{Import Source}：永久导入源文件用于 Source 页关联，需可执行文件内嵌行信息（\texttt{-lineinfo} 编译选项）。
+\end{itemize}
 
-从这里开始，选择所有与 Speed of Light 相关的内容，例如 Speed of Light 吞吐量、Speed of Light 屋顶线图（Roofline）、Speed of Light 分层屋顶线图等。如果点击这里，可以看到其他一些选项。同时不选择 PM 采样，但选择计算工作负载（Compute Workload）。如果只想要这些选项中的一个，可以选择它。然后可以在这里选择所有已选的选项，因为它们都非常重要，后面将解释每一个。然后也可以选择指令统计、启动统计、占用率（Occupancy）、GPU 和内存工作负载分布等。
-
-如果还记得之前的讨论，会知道在这里选择的项目在命令行分析中是以部分（Section）的形式呈现的。例如还记得前文中的表格吗？这些就是 Nsight Compute 中包含的部分。
-
-例如看计算工作负载分析，如果来到这里，可以看到计算工作负载分析，然后看一下，例如 Sub-warp 统计。然后再回到这里，会看到 Sub-warp 统计。一旦为分析过程选择了所需的部分和指标，就可以来到这里。同样适用于调度器统计、内存工作负载分析等。然后可以开始点击这里"运行至下一个核函数"。
-
-VectorAdd，这是下一个核函数。选择核函数，然后点击分析核函数，这就是分析过程的开始。一旦点击分析核函数，它将开始执行应用程序，并在执行过程中收集性能指标。
-
-\subsection{分析结果概览}
-
-如所示，分析过程已经完成，可以查看结果了。这里没有结果，因为有很多标签页需要选择。例如有一个摘要（Summary），从这个摘要中可以看到一些信息：已实现的占用率。它解释了理论占用率和已实现占用率。例如理论占用率是 100\%，前文已经讨论过这个了。在命令行分析中的占用率，理论占用率是 100\%，已实现的占用率大约是 80\% 或 81\%。
-
-使用的是相同的指标，但显示指标的方式不同。这里通过一些信息图表来显示，而那里是通过表格来显示的。如果来到这里，可以看到同样的理论 100\%，已实现 81\%。也可以看到这些内容并阅读，但将从另一个标签页阅读。
-
-那个标签页有更多细节，例如详情（Details）标签页，如所示，这里会显示包含的所有部分。例如 GPU Speed of Light 吞吐量，这是第一个；然后有计算工作负载分析；然后是内存工作负载分析。这里有一些技巧可能会给出更多信息，因为可以看到一些表格。
-
-在指标选择中包含的所有内容，都会在详情标签页的这个部分看到其输出。组织得很好。例如可以看到吞吐量，有 16\% 的吞吐量。同样可以再次回到命令行分析，看到这个值也显示在那里。这里只是在两种方法之间建立联系，以便选择最适合的方法。
-
-先看这里，内存吞吐量是 95\%，L1 和 L2 缓存的吞吐量分别是 21\% 和 40\%。在这里可以看到经过的周期数，这个核函数执行的持续时间等。此外如果选择这些选项或指标中的任何一个，可以在这里看到细节。例如，如果在这里选择持续时间，它会显示单位，单位是纳秒，显示值。这里的值是 970，也就是 978，但这里是纳秒，那里是微秒。如果想在命令行分析中做同样的事情，可以使用这个指标。
-
-如所示，\texttt{gpu\_\_time\_duration}。还记得那个分析吗？所有想从图形界面获取、以便于命令行分析一起使用的内容，都可以从这里获取。然后在这个右侧部分的末尾，可以看到 Average、Sum、Minimum。这些在前文中也讨论过。
-
-现在可能会问，为什么最小值、最大值、总和所有这些都有相同的值？因为现在讨论的是持续时间，而对于整个 GPU 的时间，它们应该是相同的。但对于其他情况则不同，例如周期数，每个 SM 使用的字节数就不同。但讨论的是总时间，总时间它们应该相同。
-
-这是第一部分，GPU Speed of Light 吞吐量。然后这里有计算工作负载分析。如所示，有每个周期的指令数（IPC），每个活动周期的指令数，需要搜索它们之间的区别，这是经过的（Elapsed），这是活动的（Active）。这些将在后续章节中讨论。
-
-但这不是本节的重点，因为本节的主要重点是熟悉 Nsight Compute 工具，而不是优化应用程序，也不是理解每个术语。重点是理解 Nsight Compute 工具。在其他章节中将使用 Nsight Compute 工具进行优化。
-
-\begin{figure}
+\begin{figure}[H]
     \centering
     \includegraphics[width=0.75\linewidth]{resources/cuda-107.png}
-    \caption{}
-    \label{fig:placeholder}
+    \caption{Start Activity 配置对话框：选择目标平台、活动类型（Profile / Interactive Profile / Occupancy Calculator / System Trace）、Launch 或 Attach 模式，以及 Cache Control、Clock Control 等采集选项}
+    \label{fig:ch30-startactivity}
 \end{figure}
 
+\subsection{交互式分析与 Profile Kernel}
 
-\subsection{内存瓶颈分析}
+选择 Interactive Profile 并 Launch 后，目标程序以插桩模式启动，并在第一个 CUDA API 调用（通常是 \texttt{cuInit}）处暂停所有线程，等待工具附加分析。界面顶部提供 \textbf{Profile Kernel}、\textbf{Disconnect}、\textbf{Terminate} 等控制按钮，下方 API Stream 列出已拦截的 CUDA 驱动 API 调用序列（如 \texttt{cuLibraryLoadData}、\texttt{cuCtxPushCurrent}、\texttt{cuModuleGetFunction}、\texttt{cuLaunchKernel}），如图~\ref{fig:ch30-interactive} 所示。
 
-接着还有内存工作负载，这里有 SM 繁忙时间的百分比。这里有 L1 的命中率，有 0\% 的命中率。在命令行分析章节中测量过这个，33\% 的命中率，这也非常糟糕。对于 L2 命中率有 33\%，这意味着在内存操作上消耗了太多时间或太多周期。因为必须访问 L1，却找不到需要的数据。然后访问 L2 能找到一些，但其他的数据不在那里。需要从全局内存进行大量读取甚至写入操作，这需要很长时间，需要很多周期，数百个周期。这里只是逐步说明这些数字的含义。
-
-然后有内存繁忙百分比、最大带宽，实现了大约 95\% 的内存带宽。有 95\%，现在可能会想这很好，是个好兆头。但这并不好。因为如果实现了全局内存最大带宽的 95\%，这意味着访问全局内存太频繁了，需要减少这种情况。
-
-理解这些指标的含义非常重要。再看看 L2 缓存中包含了一个叫做压缩的功能，这与 Ampere 架构也有关系。因为这些功能中的一些是从 Ampere 架构开始引入的，而不是之前的架构，比如 Volta、Turing、Pascal 等。然后还有调度器统计，前文已经讨论过调度器统计了。
-
-在讨论 Sub-warp 统计之前，先停在这里。可能会问，这些表格看起来和这里的表格非常相似，简直一模一样。在这里做什么？命令行分析和图形用户界面之间有什么区别？它们显示的是相同的表格吗？但事实并非完全如此。稍后将跳转一下，展示图形用户界面中包含的最佳功能。
-
-这里有 Sub-warp 统计，如所示，有一个非常重要的指标：每个已发布指令的 Sub-warp 周期数。需要阅读所有这些信息。可以说大约需要 119 或 120 个周期来处理每个已发布的指令，这非常重要。需要阅读所有内容，因为这些说明中的一些可以看作是对你的建议或者是一些要点，能帮助优化应用程序以实现高性能。
-
-例如读一下这里的说明："平均而言，这个核函数的每个 Sub-warp 大约花费 111 个周期处于停滞（Stall）状态。"这非常糟糕。停滞意味着这个 Sub-warp 在约 111 个周期内什么都没做。想象一下，有 111 个周期，每个 Sub-warp 就只是停在那里不退出，也不执行任何指令。如果继续看会找到导致这个问题的原因。需要改进这一点，以确保在每个周期内尽可能让每个 Sub-warp 执行一些操作，执行一条指令。
-
-这背后的原因是什么？说过有 111 个周期的停滞。"等待长计分板依赖（Long Scoreboard Dependency）"，可以阅读来了解，这里的依赖意味着某个指令正在等待前一个结果或从内存的读取操作。它说明依赖是由于从 L1/纹理缓存读取数据，或者可能是来自其他内存层级。例如本地内存、全局内存、表面内存或纹理操作单元。可以从这里知道遇到了内存瓶颈问题。
-
-\begin{figure}
+\begin{figure}[H]
     \centering
     \includegraphics[width=0.75\linewidth]{resources/cuda-108.png}
-    \caption{}
-    \label{fig:placeholder}
+    \caption{Interactive Profile 运行界面：API Stream 列出 \texttt{cuLaunchKernel} 等驱动 API 调用，选中核函数后点击 Profile Kernel 开始采集指标}
+    \label{fig:ch30-interactive}
 \end{figure}
 
-\subsection{源代码与汇编分析}
+交互式分析的工作流程为：程序运行至下一个核函数启动时暂停，点击 \textbf{Profile Kernel} 对该核函数采集指标，结果呈现在 Profiler Report 中；也可用 \textbf{Run to next kernel} 连续运行至下一个核函数。需要注意，Interactive Profile 模式下所有 GPU 工作负载被串行化，支持的 API 包括 CUDA 与 OptiX。
 
-回到这里，还记得最大带宽吗？当说如果正在实现一个高带宽时，高内存带宽在某些情况下可能是好的，但在其他情况下就非常糟糕。这就是这些指标与在 Sub-warp 统计中看到的停滞是如何关联的。特别是当 L1 和 L2 命中率很低时。然后可以看到每个 Sub-warp 有 32 个线程，每个 Sub-warp 有 30 个未被屏蔽（Unmasked）的线程。
+\subsection{Profiler Report 概览与页面结构}
 
-继续看查找产生数据的指令。但在那之前来到这里，点击视图标签页，然后点击这里的展开所有部分。它说需要找到导致停滞的指令，下面展示这一点。如所示，这就是图形用户界面和命令行分析之间的主要区别。这是添加到 Nsight Compute 图形界面中的最佳功能。看到这个部分了吗？如所示，拥有相同的部分。除了图表之外，这里没有添加任何新内容。
+分析完成后进入 Profiler Report。报告由报告头与若干页面（Page）组成，页面标签位于 Attributes 行：\textbf{Summary}、\textbf{Details}、\textbf{Source}、\textbf{Context}、\textbf{Comments}、\textbf{Raw}、\textbf{Session}。报告头显示核函数名、网格与块维度、执行时间、周期数、GPU 型号与频率、进程名等概要信息。打开单结果报告默认进入 Details 页，多结果报告默认进入 Summary 页。
 
-看到计算工作负载了吗？看到内存工作负载了吗？可以很容易地阅读它，但添加了一些图表，以便用一种好的方式将数据或分析输出可视化。
+图~\ref{fig:ch30-details} 展示了 Details 页的 GPU Speed Of Light Throughput 分段，给出本次 vectorAdd 的关键指标：Compute (SM) Throughput 16.17\%、Memory Throughput 95.39\%、L1/TEX Cache Throughput 21.77\%、L2 Cache Throughput 40.49\%、DRAM Throughput 95.39\%，以及 Duration 970.46\,\textmu s、Elapsed Cycles 1,366,790、SM Frequency 1.41\,GHz 等。
 
-例如，这里有两个重要的吞吐量或利用率计算：SM 吞吐量和内存吞吐量。说过内存吞吐量是 95\%。但计算吞吐量是多少呢？16\%，这意味着这个应用程序是内存瓶颈型（Memory Bound）的，为什么？因为它只使用了 16\% 的算术逻辑单元（ALU）。只利用了 16\%，但从内存方面利用了 95\%。
-
-这意味着应用程序大部分时间在进行内存操作，而不是算术运算。不需要这样，需要在提高 L1 和 L2 命中率的同时，稍微降低这个数值。因为如果提高了 L1 和 L2 的命中率，那将减少内存带宽的使用。同时增加算术运算，以充分利用可用的硬件核心。这就是如何解释内存瓶颈或者说应用程序的瓶颈——它是计算瓶颈型（Compute Bound）还是内存瓶颈型。
-
-这是第一个图表，非常重要。也可以阅读这两条说明，因为可能会给出一些启发。也可以点击这些链接，一些是在线的。如果点击这里，这将带你到内存工作负载分析部分。
-
-看看计算工作负载分析。如所示，这只是对不同类型算术操作及其利用率的可视化呈现。例如这里有 FMA 单元或 FMA 指令。FMA 指的是融合乘加运算（Fused Multiply-Add），而 ALU 则包含除双精度外的所有其他算术操作。这将包括例如单精度、半精度、整数精度等。这里使用了大约 3.55\% 的可用资源用于融合乘加运算。
-
-而这里使用了大约 4\% 左右，但这指的是活动周期中的百分比，意思是如果整个 GPU 有 100 万个活动周期，大约使用了其中的 4\% 来执行 ALU 运算。另外 4\% 或 3.55\% 用来执行乘加运算。
-
-后面将给出一个关于这个的实际例子。这里有其他单元，例如加载/存储单元（LSU）。不确定 IDU 指的是什么，但双精度在这里。无论如何，这是相对于执行的峰值指令数而言的。意思是从白皮书中知道，在这款 GPU 这个架构上，不同类型的算术操作有一个可执行数量的峰值。假设例如加载/存储单元的峰值是 1000 TOPS。这里只使用了峰值数的 16\%。可以看到这里执行了太多的加载和存储单元指令。
-
-加载和存储单元执行什么操作？内存操作、全局内存、L1/L2 内存操作或者共享内存操作。如果把它与 ALU 和 FMA 相比，这并不好。可以看到，这个单元的待执行指令数量很大。而这是因为如果内存操作相比 ALU 来说很大，这将导致内存瓶颈。
-
-看看内存工作负载分析，这非常重要。因为它会给出一个概念，并提供更多关于有多少请求、在不同内存层级之间移动了多少数据等细节。这里没有使用任何单精度或双精度，这就是为什么它们都是零。
-
-这里有主要的内存单元，例如有共享内存加载、全局内存存储、共享内存。这是稍后会讨论的单元，先别关注它。另一个单元叫做表面内存、纹理内存、本地内存和全局内存。这是第一级，这里有它们的第一级。还记得命令行分析吗？\texttt{l1tex\_\_...}，这是 L1 缓存。还记得这些指标以及它们是怎么写的吗？如所示，它们显示命中率是 0\%。
-
-从这个图形界面可以读取许多性能指标，而无需费力去阅读指标名称、硬件单元名。需要提醒一下，看到这个了吗？有十万个指标，还记得吗？
-
-这里一切都组织得很好。这比试图搜索需要知道的指标在哪里、描述是什么等要好得多。如所示，L1 缓存的命中率是 0\%。对于共享内存没有请求。因为在这个应用程序中，如果没有使用共享内存，只是在不使用任何共享内存的情况下将两个向量相加。这就是为什么这里的请求数量是 0。
-
-然后是第二级 L2 缓存，这里是零或者说是 33\%。如所示，在它们之间有传输的数据量，可以计算所有这些。然后从 L1 到 L2，这意味着写入结果，因为正在读取向量 A 例如从 L2 到 L1，移动了大约 268 兆字节和向量 B，然后计算单元将完成执行，写入的数据量大约是此值的一半。因为读取两个向量，但只写入一个向量即 C 向量。然后 L2 缓存中的命中率是 33\%。
-
-接下来给你一个任务，需要搜索如何提高 L2 缓存的命中率。只是思考一下，看看是否能做些什么。然后这是设备内存，也就是最后一级。有全局内存、L2 缓存、L1 缓存以及计算单元本身之间的请求数量。这来自 ALU，来自 SM。而内存单元会将这些操作发送到 L1 级。大约有 315 万条指令从 SM 发出，到达加载和存储单元或全局内存操作单元。
-
-然后 L1 级如果没有命中，会将这些请求发送到 L2。L2 如果命中，它会将结果或数据发送回这里。如果没有命中，它将向设备内存请求这个数据。这里展示的就是这个情况。这就是内存图表图形界面的样子。大约有 100 万次请求从 SM 发往 L1，大约有 210 万次对这些请求的回复。
-
-如所示，不太确定具体如何解读。这里说例如如果看到这个颜色，这意味着正在达到峰值。例如看这里，如果记得设备内存的吞吐量是 95\%，可以看这里，用了这个颜色。因为有 95\%，但对于 L2 有 33\%。
-
-这就是为什么它在这个区域是这个颜色。对于 L1 有 0\%，它是深色的。如所示，这是一个非常重要的图表。然后这里有调度器统计。再次建议阅读这里的所有内容，GPU 每个调度器最大 Warp 数，如果记得应该是 16。
-
-在这个应用程序中实现了 12 个，有一个不错的值。如果有 16 个，而实现了 12 个，这很好。这是每个调度器的理论值，数值也是 12。每个调度器的活动 Warp 数大约是 9.69，这是理论的，这是实际达到的。然后每个调度器的合格（Eligible）Warp 数和每个调度器已发出的 Warp 数。总之现在不关注所有这些，这里相同的数据用图表可视化了。
-
-如所示长时间计分板停滞（Long Scoreboard Stall），大约是 111 个周期停止等待。可以查看这个 Warp 采样。搜索一下长时间计分板停滞。但不管怎样，这里有短时间计分板停滞（Short Scoreboard Stall）。
-
-这是指如果命中了某个内存层级，但这是指如果计算所有层级的平均值。然后有指令统计。这与不同的指令有关，停滞、耗尽（Throttle）、选定存储屏障。需要查找更多关于这些类型停滞的信息。例如整数乘加指令，意思是所有这些指令都在这个应用程序中执行了。并且获取每一条汇编指令，试图告诉你每条指令在应用程序中执行了多少次。
-
-例如看乘加指令，可以看到它执行了超过 400 万次。\texttt{S2R} 这是用来读取时钟之类的，大约是二百多万次。有一个从内存加载值的加载指令，如所示，它也执行了超过 200 万次。移动指令超过 200 万次，退出指令等。还有将两个值相加的 \texttt{IADD} 指令，执行了一百多万次。
-
-如果想查看这个应用程序中的所有指令，可以转到源代码（Source），这是这个应用程序核函数的汇编语言。这是汇编语言，这是 CUDA 的代码。这是这个核函数的汇编语言。还记得这里的内容吗？
-
-需要加载 A 值，然后加载 B 值，将它们相加并将结果存储在 C 中。这里读取线程 ID、块 ID 并进行一些计算，比如加法和乘法，并将值存储在 i 中。这里使用 i 值从内存加载 B、从内存加载 A、将两个值相加，并将结果存储在 C 中。这就是将在汇编语言输出中看到的内容。
-
-例如看看这个，还记得这个指令吗？这只是读取一个寄存器，一个预定义的寄存器，如所示这个值线程 ID，这个值 CTID，前文中说过 CTA 指的是块 ID。一旦读取了线程 ID 和块 ID，如果还记得这里，需要进行加法和乘法。这就是为什么这里有 \texttt{IMAD}。\texttt{IMAD} 指令将在这里执行，这里还有另一个 \texttt{IMAD}。一旦通过 \texttt{IMAD} 计算完所有这些值，需要将它们存储在这个值即 R6 值中，这就是 i 变量。然后有 \texttt{EXIT}，因为 if 语句的条件没有满足，那么需要退出。
-
-如果 i 不小于 N 需要退出核函数，然后需要执行 if 语句。这就是在汇编语言中做 if 语句的方式。但如果不是，如果 i 小于 N 需要执行这个，这就是为什么这里有 \texttt{EXIT} 指令。如果达到了语句的条件，意思是需要执行这里的这个命令，那么将执行 if 语句内部的内容。
-
-如所示，不会看所有的指令。但这里是前几条指令，前四条指令只是获取 i 值。需要在这里做的是有一个加载 A 的指令，一个加载 B 的指令。这是从内存加载，这也是从内存加载，然后需要乘加。因为一旦加载了 B 和 A 需要将两个值相加。这就是为什么需要 \texttt{IMAD} 或 \texttt{ADD} 指令。
-
-\begin{figure}
+\begin{figure}[H]
     \centering
     \includegraphics[width=0.75\linewidth]{resources/cuda-109.png}
-    \caption{}
-    \label{fig:placeholder}
+    \caption{Details 页 GPU Speed Of Light Throughput 分段：Compute 吞吐量仅 16.17\% 而 Memory 达 95.39\%，表明该核函数为内存瓶颈型；规则给出 High Throughput 与 Roofline Analysis 建议}
+    \label{fig:ch30-details}
 \end{figure}
 
-\subsection{指令依赖与停滞分析}
+\subsection{Details 页与引导式分析}
 
-现在不解释为什么这里两者都有。R4、R3。但想象一下可以把 \texttt{IMAD} 当做 \texttt{ADD} 使用，然后还有 \texttt{ADD}，这是加法过程。读取 B 值并存储在 R3，因为读取 A 值并存储在 R4，然后如所示，在这里将 R4 和 R3 相加，并将值存储在 R9。但不管怎样，现在不想关注这个命令。但能看到这里的感叹号吗？如所示，如果把鼠标移到这里，会看到这个信息。这一行指令要对 84\% 的停滞负责，所有 Sub-warp 停滞的 84\%。
+Details 页是所有采集指标的主页面，由多个分段（Section）组成。每个分段包含一个头部表格与可选的可展开主体（含图表或子表）。分段完全可自定义，修改对应的 \texttt{.section} 文件即可。
 
-再看一下这一行指令停滞的 99.7\%，这一行指令导致了停滞。可能会问为什么是这一行？这只是加法，为什么加法过程会导致大量停滞？
+Details 页的核心价值在于\textbf{引导式分析（Guided Analysis）}。工具自动应用内置规则集（Rule），对每个分段生成 Recommendations，并给出两类加速比估计：
 
-如所示，有一个依赖，如果不从内存读取两个值，就无法对它们进行加法。这个加法将等待直到从内存获取 R4 和 R3。这就是为什么这里有依赖，这个依赖可以在这里显示出来。确认一下，有这个信息。
+\begin{itemize}
+    \item \textbf{Est. Speedup}（全局估计）：工作负载整体运行时间的预期下降幅度。
+    \item \textbf{Est. Local Speedup}（局部估计）：该规则针对的特定性能问题在硬件利用率上的预期提升。
+\end{itemize}
 
-是的，如果引用这个指令，这些就是对依赖的解释。这个依赖于这个和这个。每当在这里看到这个，这意味着这个依赖于前面的那个。看看这个指令依赖什么。如果到这里看看这个三角形符号，从汇编代码看，它应该依赖于 R3 和 R4。这是三角形符号。它具体在哪里？是的，这里有一个依赖。
+在 Summary 页，\textbf{Prioritized Rules} 按预估加速比从高到低排序，点击规则名可直接跳转到 Details 页对应分段，便于聚焦最大的优化机会。例如图~\ref{fig:ch30-details} 中的 High Throughput 规则提示核函数已超过 80\% 的计算或内存性能上限，需将工作从最繁忙的单元转移到其他单元；Roofline Analysis 规则则指出该核函数仅达到 fp32 峰值的 0\%。
 
-看看这个，看到 R4 了吗？如所示，依赖于 R4。但也应该看到，这里有什么依赖于 R3。
+Details 页还包含若干可视化子段：\textbf{Memory Workload Analysis} 的 Memory chart 以热力图可视化各级缓存间的数据传输量、命中率与内存请求；\textbf{Roofline} 图可缩放平移（支持 \texttt{+}/\texttt{-} 键与 Ctrl+滚轮）；\textbf{Source Counters} 的热点表指向 Source 页中的性能问题源码位置。
 
-集中在这里，R4 在这里和这里都存在，这个指令需要等待来自这里的 R4，然后这个指令需要等待来自这里的 R4，情况就是这样。还有看看这个，每当看到右侧的这个部分，就会看到依赖关系。例如再次集中注意力，这里有一个向右的箭头，如果向上看会发现它依赖于 R4。这里同样这个指令有另一个向右的三角形。R3 也有一个向右的三角形，它依赖于这里的这个指令。如果点击这里，会发现它也依赖于 R3。如所示 R3，这就是这里展示的依赖关系。
+\subsection{指标选择（Metric Selection）}
 
-回到这里查看已执行的指令，这是每条指令执行时间的百分比。但可以看看这里的 Warp 停滞采样，可以看到这个指令导致了大约 93\% 的 Sub-warp 停滞。因为它等待前面所有指令的结果，而前面所有指令又依赖于更前面的指令，这是最后一条指令，它依赖于前面的所有指令。
+图~\ref{fig:ch30-metricsel} 展示了 Metric Selection 工具窗口，列出所有可用分段与规则及其优先级编号（Priority）。这里的分段即命令行中 \texttt{--section} 指定的内容，GUI 与 CLI 采集的是同一套指标，区别仅在呈现方式。窗口提供 \textbf{Reload}、\textbf{Enable All}、\textbf{Disable All} 与过滤框，可按需勾选。
 
-同样对于存储指令，也是因为一旦完成了加法过程或加法操作，需要将值存储到内存中的 C 里。这就是为什么这里有一条存储指令，\texttt{STG} 存储到全局内存。需要从加法过程或加法操作中取出 R9，并将其存储在 C 值中。如所示，同样这条指令导致了 93\% 的停滞。这解释了这里的一切。在 Sub-warp 统计中，看看有什么。
-
-是的，从这些选项中可以确定其他一些选项。例如有地址空间，可以从这里开始查看已执行的指令，但可以专注于地址空间。地址空间意思是在这里访问的是全局内存，但可以左右移动这个来查看所有内容，这也适用于全局内存。如果看这条指令，正在从全局内存加载，这些信息非常重要。
-
-这是加载不是存储，但这里是存储。而扇区（Sector）是一个扇区，这里的扇区大小是 32 字节。因为如果还记得前文，一个扇区等于 32 字节。很多线程不仅仅是相加两个元素，每个是四字节加四字节，正是相加两个元素。但是是针对不同的线程，所以每个线程将需要四字节，这就是为什么每次指令执行加载 32 字节。
-
-是的，这是寄存器的活跃性。还有其他内容吗？不确定活跃寄存器的含义，但可以稍后讨论。如果有其他核函数，可以从这里选择核函数。这里是 SASS，但没有生成 PTX，所以关注的是 SASS 指令，现在先跳过它。上下文，这是稍后需要讨论的内容。
-
-环境（Environment），在这里可能会看到一些关于操作系统的信息。比如 Windows 11 名称、创建时间，拥有的 CPU 主机架构等。如果想查看这些信息，这只是其中一部分。如果 Nsight Compute 图形界面提供了关于性能分析的注释，这里应该包含一些注释，但不需要看这个。
-
-回到详情，看看是否还有其他需要查看的东西。这里有一些说明，如果增加每个线程的寄存器数量会发生什么？实现了大约超过 40\%，好像是 50\% 左右。在纵轴上有 Sub-warp 占用率。这里这个 48\%，这是因为每个线程使用了 16 个寄存器。但它说如果改变应用程序代码来增加每个线程的寄存器数量，将会降低 Sub-warp 占用率，正如这个图所示。这意味着可以从这个图中了解到，可以将每个线程的寄存器数量从 16 增加到 40，而不会导致 Sub-warp 占用率的下降。
-
-这就是需要从这里学习的。可以将每个线程的寄存器数量从 16 增加到 40，而不会导致任何下降或损害 Sub-warp 占用率，这对性能来说是非常重要的。如果将每个线程的寄存器数量增加到超过 40，那么将会导致性能问题。同样适用于块大小——应用程序性能。它说在这里，在这个点上块大小是每个块 96 个线程，使用每个块 96 个线程，可以从这里的启动统计中看到这一点。它说，如果将这个数字从 96 增加到 128，Sub-warp 占用率将不会有任何影响。
-
-这里只讨论 Sub-warp 占用率，但如果到这里将其增加到例如 800，将大大降低占用率，从 48\% 降到大约 24\%，相当于占用率下降了 50\% 左右。但如果例如将其增加到 224，将稍微降低占用率。如果降低了占用率，将会影响应用程序的整体性能。如果增加了使用的共享内存，将会导致占用率的下降。同样适用于每个块的共享内存，但这里是因为在这个应用程序中没有使用共享内存。
-
-不打算再次解释所有这些，但需要看看这部分。这是总数，不是每个 SM。在解释 Warp 停滞采样，并说有 47000 次停滞。它说可以点击这里来了解是哪条指令导致了所有这些停滞。如果还记得从源代码标签页，知道这条指令导致了大部分的停滞。但可以点击这里，它会带我们到同一条指令。
-
-可以从这里的百分比值看到停滞的第二大原因。不知道是否有更多，但可以来到这里点击导致停滞的第二条指令，它会带我们到那个分支。再次点击这里，它选择了这里的这个，因为这个导致了 2\% 的停滞。无论如何，这是针对执行最多的指令。如果点击这里，它会带你去那条执行了一百多万次的指令。点击这里，这条执行了一百多万次，可以对其他的做同样操作，但不全部演示。
-
-\subsection{占用率计算器与优化}
-
-\begin{figure}
+\begin{figure}[H]
     \centering
     \includegraphics[width=0.75\linewidth]{resources/cuda-110.png}
-    \caption{}
-    \label{fig:placeholder}
+    \caption{Metric Selection 工具窗口：列出所有分段与规则（GPU Speed of Light Throughput、Compute/Memory Workload Analysis、Scheduler/Warp State Statistics、Instruction Statistics 等），带优先级编号 10--60}
+    \label{fig:ch30-metricsel}
 \end{figure}
 
-\begin{figure}
+主要分段及其优先级编号为：GPU Speed of Light Throughput（10）、Roofline Chart 与 Hierarchical Roofline Charts（11--12，按 Double/Half/Single/Tensor Core 精度）、PM Sampling 与 Warp States（15--16）、Compute Workload Analysis（20）、Memory Workload Analysis 及其 Chart/Tables（30--32）、Scheduler Statistics（40）、Warp State Statistics（50）、Instruction Statistics（60）。
+
+\subsection{内存与计算瓶颈分析}
+
+GPU Throughput Chart 是判断瓶颈类型的第一手依据。以图~\ref{fig:ch30-details} 为例，Compute (SM) Throughput 仅 16.17\% 而 Memory Throughput 高达 95.39\%，二者悬殊表明该核函数为\textbf{内存瓶颈型（Memory Bound）}——大部分时间花在内存操作而非算术运算上。此时 95\% 的高带宽并非好事，它意味着对全局内存访问过于频繁，应通过提高 L1/L2 命中率（如共享内存分块）来降低该数值。
+
+\textbf{Compute Workload Analysis} 进一步分解各算术管道的利用率：FMA（融合乘加）、ALU（单精度/半精度/整数等）、LSU（加载存储单元）、FP64 等。本例 LSU 利用率约 16\% 而 ALU/FMA 仅 3--4\%，印证内存指令占比过高。
+
+\textbf{Memory Workload Analysis} 展示各级内存的命中率、请求数与传输量：本例 L1 命中率 0\%、L2 命中率 33\%，大量请求未命中 L1 后穿透至 L2 甚至设备内存。Memory chart 以颜色编码标识各单元的繁忙程度（95\% 处于峰值色区，0\% 为深色）。
+
+\textbf{Warp State Statistics}（Sub-warp 统计）给出停顿原因：本例每个 Sub-warp 平均停顿约 111 个周期，主要原因是 Long Scoreboard Dependency——即指令等待前序内存读取结果。这与低 L1/L2 命中率相互印证：内存访问未命中导致长延迟，后续依赖指令被迫停顿。
+
+\subsection{Source 页与源码关联}
+
+Source 页将汇编（SASS）与高层代码（CUDA-C、PTX、Python 等）关联，并显示指令级指标，是 GUI 相对 CLI 最具优势的功能。图~\ref{fig:ch30-source} 展示了 vectorAdd 核函数的 SASS 反汇编，其核心指令序列如下：
+
+\begin{lstlisting}
+MOV  R1, c[0x0][0x28]       ; 取常量
+S2R  R6, SR_TID.X           ; 读线程 ID
+S2R  R3, SR_CTAID.X         ; 读块 ID
+IMAD R6, R3, c[0xe][0xe], R6 ; 计算全局线程索引
+ISETP.GE.AND P0, PT, R6, c[0x3][0x178], PT  ; i >= N?
+EXIT                          ; 越界则退出
+ULDC.64 UR5, c[0x0][0x118]
+IMAD.WIDE R1, R6, R7, c[0xe][0x168]
+IMAD.WIDE R2, R6, R7, c[0xe][0x160]
+LDG.E R4, [R1.64]            ; 从全局内存加载 A[i]
+LDG.E R3, [R2.64]            ; 从全局内存加载 B[i]
+IMAD.WIDE R6, R6, R7, c[0x0][0x170]
+IADD3 R9, R4, R3, R2         ; C[i] = A[i] + B[i]
+STG.E [R6.64], R9            ; 存储到全局内存
+EXIT
+BRA                           ; 循环跳回
+\end{lstlisting}
+
+\begin{figure}[H]
     \centering
     \includegraphics[width=0.75\linewidth]{resources/cuda-111.png}
-    \caption{}
-    \label{fig:placeholder}
+    \caption{Source 页 SASS 视图：关联汇编与源码行，\texttt{Navigate by} 可按已执行指令数、Warp 停顿采样等排序，右侧显示寄存器活跃性与停顿采样统计}
+    \label{fig:ch30-source}
 \end{figure}
 
+Source 页的关键特性包括：
 
-\begin{figure}
+\begin{itemize}
+    \item \textbf{视图切换}：\texttt{View} 下拉可在 SASS、PTX、Source（CUDA-C）间切换，或并排显示两层。CUDA-C 视图需用 \texttt{-lineinfo}（或 \texttt{--generate-line-info}）nvcc 选项编译以嵌入行信息。
+    \item \textbf{导航}：\texttt{Navigate By} 按已执行指令数、停顿采样等排序；热点表可从 Source Counters 分段跳转到对应源码行。
+    \item \textbf{依赖关系}：如图~\ref{fig:ch30-deps} 所示，右侧可显示 Register Dependencies、Predicate Dependencies 等列，鼠标悬停指令会以箭头标注其依赖的前序指令（如 \texttt{IADD3} 依赖 \texttt{LDG.E} 的 R4 与 R3）。
+    \item \textbf{符号标签}：SASS 反汇编中的分支目标与函数调用显示为可点击超链接，点击即跳转到对应地址行。
+    \item \textbf{停顿归因}：每条指令旁标注其导致的停顿占比，例如加载指令 \texttt{LDG.E} 与存储指令 \texttt{STG.E} 各贡献约 84--93\% 的 Sub-warp 停顿，直观定位热点指令。
+    \item \textbf{搜索}：支持正则表达式与值比较（如 \texttt{>= 5}），按列搜索。
+\end{itemize}
+
+\begin{figure}[H]
     \centering
     \includegraphics[width=0.75\linewidth]{resources/cuda-112.png}
-    \caption{}
-    \label{fig:placeholder}
+    \caption{Source 页带依赖关系列：Register/Predicate/Uniform Register/Uniform Predicate Dependencies 列标注每条指令的寄存器与谓词依赖，鼠标悬停可高亮前序来源指令}
+    \label{fig:ch30-deps}
 \end{figure}
 
+\subsection{占用率计算器与基线对比}
 
-\begin{figure}
+报告头或 Occupancy 分段的计算器按钮可打开\textbf{占用率计算器（Occupancy Calculator）}，如图~\ref{fig:ch30-occ} 所示。它以交互式图表展示改变配置对 Warp 占用率的影响：
+
+\begin{itemize}
+    \item \textbf{Impact of Varying Block Size}：调整每块线程数，观察占用率变化。本例块大小 96 增至 128 不影响占用率，但增至 800 会使占用率从约 48\% 降至 24\%。
+    \item \textbf{Impact of Varying Shared Memory Usage Per Block}：调整每块共享内存用量对占用率的影响。
+    \item \textbf{Registers Per Thread}：调整每线程寄存器数。本例 16 个寄存器，增至 40 仍不降低占用率，超过 40 才会下降。
+\end{itemize}
+
+\begin{figure}[H]
     \centering
     \includegraphics[width=0.75\linewidth]{resources/cuda-113.png}
-    \caption{}
-    \label{fig:placeholder}
+    \caption{占用率计算器：交互式调整块大小、每块共享内存、每线程寄存器数，实时观察 Warp 占用率的变化曲线，辅助在不损失占用率的前提下优化资源分配}
+    \label{fig:ch30-occ}
 \end{figure}
 
+此外，GUI 还提供以下实用功能：
 
-这就是 Nsight Compute 用户界面的工作方式。关于它就是这样了，只是确认没有其他内容了。是的，这里指标详情这个标签页，当点击这里并点击这里，这会显示任何所选项目的详情。当选择某个项目时，它会把详情显示在这里，然后也可以显示占用率计算器（Occupancy Calculator）。前文讨论过这个计算器以及如何计算占用率。可以在这里修改这些数字，看看它们对占用率的影响。
+\begin{itemize}
+    \item \textbf{基线对比（Baseline）}：用 Compare -- Add Baseline 将当前结果设为基线，此后所有元素同时显示当前值与基线值（或变化百分比），Details 分段头部以 Difference Bars 图形化差异。优化迭代时可直接观察改动效果。
+    \item \textbf{注释（Comments）}：每个分段可添加注释（气泡图标），注释持久保存于报告并汇总在 Comments 页，便于团队协作。
+    \item \textbf{导出（Export）}：报告可导出为 PDF、图像等格式。
+    \item \textbf{API Statistics}：显示 CUDA Runtime/Driver API 调用耗时，如 \texttt{cudaMemcpy} 约 40\,ms、\texttt{cudaMalloc} 约 7\,ms，用于评估非核函数部分的开销。
+\end{itemize}
 
-同样前文在另一个标签页看到的这些图表在这里也有解释，但在这里可以操作它们。可以在这里修改并观察对数值的影响。不确定现在是否有效。是的，它起作用了。比如说 1024，比如说如果点击这里的 256，看到了吗？看到变化了吗？
+\subsection{本章小结}
 
-这也是一个很好的功能，可以看到这些配置对性能的影响。可以折叠各个部分以隐藏图表，只看数字。还有什么功能？然后可以把性能输出在这里，导出或保存为 PDF、图像或其他格式。
-
-可以设定一个基线（Baseline）。如果有一个核函数并想将其与其他核函数进行比较，可以在这里进行比较。可以将一个核函数设定为基线。还能在这里查看什么？从这里开始有一个叫做 API 统计的功能，可以查看或者说隐藏这里的任何部分。从这里这将展示 CUDA 的运行时 API。还记得吗？前文有关于运行时 API 的章节，所以需要看那个章节来理解这里讨论的内容。
-
-\texttt{cudaMemcpy} 操作，这被称为 CUDA 运行时 API。\texttt{cudaMalloc} 在 GPU 的全局内存中分配空间，这也被称为 CUDA 运行时 API。同样适用于在应用程序中使用的所有其他函数，但这非常重要，因为它解释了这些 API 在这个应用程序中各消耗了多少时间。例如仅仅将数据从 CPU 复制到 GPU 或反之，这就消耗了大约 40 毫秒。在 GPU 中分配空间，这大约需要 7 毫秒。同样这与核函数执行无关。这里只是将数据从 CPU 复制到 GPU，而这里再进行分配。还记得这里的指针吗？这显示了曾经执行需要的时间。大约是 7 毫秒，这些 API 需要多少时间？可以看看这些 API 各需要多少时间来执行。
-
-不需要看所有这些东西，只需要关注指标选择和 API 统计。据所知，还可以从这里选择许多其他选项，例如这个显示或隐藏这里的内容。可能需要做的事情之一是，例如添加另一个选择项。这个分析如果想要分析核函数，比如说修改了核函数中的任何内容并想再次分析它，只需点击这里或这里。如果添加了另一个选择项，需要从这里再次分析核函数。
-
-然后从工具菜单有项目资源管理器、输出消息。看看输出消息，没有任何输出消息，也可以看看这里的选项，可以查看诸如字体等选项，这是针对用户界面本身的，可以选择一些配置，轻松地操作这些设置。然后从窗口菜单，可以显示或隐藏这里的一些窗口。
-
-这就是关于 Nsight Compute 工具的图形用户界面的全部内容。但这并不是使用 Nsight Compute 工具的结束。因为当开始讲解性能章节和优化时，将基于从 Nsight Compute 获得的结果进行优化。
+\begin{itemize}
+    \item Nsight Compute GUI 通过 Start Activity 配置采集方式，Interactive Profile 模式可逐核函数分析，Profiler Report 按页面（Summary/Details/Source/Raw 等）组织结果。
+    \item Details 页的引导式分析自动应用规则集，给出带加速比估计的优化建议；Prioritized Rules 按预估收益排序，帮助聚焦最大优化机会。
+    \item GPU Throughput Chart 用于判断瓶颈类型（计算瓶颈型 vs 内存瓶颈型），Compute/Memory Workload Analysis 与 Warp State Statistics 进一步定位具体管道与停顿原因。
+    \item Source 页关联 SASS 与源码，标注每条指令的停顿占比与寄存器依赖，是定位热点指令的核心工具。
+    \item 占用率计算器交互式评估块大小、寄存器、共享内存对占用率的影响；基线对比功能便于优化迭代。
+    \item 后续性能优化章节将基于 GUI 采集的结果展开具体优化实践。
+\end{itemize}

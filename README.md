@@ -95,7 +95,7 @@ CUDA 的 Hello World。通过"打印块和线程 ID"这一最小项目，讲透 
 | 章节 | 内容 |
 |------|------|
 | 第 26 章 | Nsight Compute 入门 |
-| 第 27 章 | NVIDIA 全系性能分析工具（Nsight Systems/Compute/nvprof） |
+| 第 27 章 | NVIDIA 全系性能分析工具（Nsight Systems/Compute 与 Compute Sanitizer） |
 | 第 28 章 | 错误检查 API 详解 |
 | 第 29 章 | 命令行模式下的 Nsight Compute 性能分析 |
 | 第 30 章 | 图形化 Nsight Compute 使用 |

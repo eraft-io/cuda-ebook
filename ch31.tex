@@ -1,120 +1,258 @@
 \section{性能分析方法论}
 
-本章将对上一节最后一个应用程序进行一些性能分析。需要做的只是改变块大小（Block Size），看看它如何影响不同的性能指标。从 CUDA 代码开始，如所示，这里有一个将两个向量相加并将结果存储在第三个向量中的核函数，该向量称为 C 向量。然后在主函数中，遵循一般 CUDA 应用程序的步骤。如所示，定义了一些指针，然后在 GPU 中为这些向量或指针分配空间，然后在 CPU 端做同样的事情，并初始化向量 A 和 B，然后将数据从 CPU 中的 A 和 B 复制到 GPU 中的 A 和 B，以便能够在 GPU 中执行加法操作。然后执行核函数来执行加法操作，最后使用 \texttt{cudaMemcpy} API 返回结果。这就是在这个应用程序中需要做的和需要了解的全部内容。
+本章建立一套可复现的性能分析方法论：通过系统地改变核函数的块大小（Block Size），观察其对各性能指标的影响，并用 Python 脚本自动化完成采集与绘图。实验对象仍是向量加法核函数——将两个向量相加并存入第三个向量，核函数的网格块数由命令行传入的块大小决定。
 
-这里需要控制或操作的是每个网格的块大小变量。实际上有两个变量，不是一个。因为如果还记得，对于任何 CUDA 核函数，有两个配置。第一个是每个块的线程数，第二个是应用程序中的块数。如果搜索这个，可以往上翻，看到正在从终端读取这个值。当执行这个应用程序时，需要在执行时添加块大小，并且这个值将被输入到这里的这条指令中。相比于上一节讨论的内容，这只是在应用程序中所做的唯一更改。
+\subsection{实验设置与块大小参数}
 
-回到这里，这个文件叫 \texttt{test\_01}。这里有一个名为 Section 05 的新章节，输入 \texttt{ls} 命令，这是文件。需要编译这个文件，写 \texttt{nvcc -o}，然后需要为可执行输出起个名字。可以说例如 \texttt{test\_01}，可以就这样写，或者也可以写 \texttt{.exe}，两者都可以。然后需要 CUDA 应用程序的 \texttt{.cu} 文件，接着按回车键。这里有可执行文件，可以直接复制这个并按回车键。
+CUDA 核函数的启动配置由两个参数决定：每个块的线程数（块大小）与网格中的块数。本实验将块大小从 32（一个 Warp）到 1024（CUDA 架构允许的最大块大小）以步长 32 递增，共 32 组配置。网格块数按如下公式计算，确保线程总数等于元素总数：
 
-需要做的就是来到这里写一个空格，然后假设块大小是 256 个线程。如所示，它没有运行，因为先去掉这个空格，还是不行。因为它在这里要求块大小。然后按回车，应用程序成功执行，没有任何问题。终端上不会显示任何内容，因为没有打印任何东西。总之这就是需要做的。可以在这里放一个 \texttt{printf} 或类似的东西，以确保执行成功完成。
+\begin{lstlisting}[language=C]
+int block_size = atoi(argv[1]);          // 从命令行读取块大小
+int grid_size  = (N + block_size - 1) / block_size;
+vector_add<<<grid_size, block_size>>>(d_a, d_b, d_c, N);
+\end{lstlisting}
 
-\subsection{Python自动化分析脚本}
+编译与单次运行方式如下（块大小作为命令行参数传入）：
 
-需要改变块大小，并用不同的块大小来分析这个应用程序，以观察这个变化的影响。这里有一个 Python 文件，它可以完成所有这些分析。将读取一些性能指标，然后有 L1 命中率、L2 命中率、占用率（Occupancy）。第一个是执行时间，第二个是活动周期数（Active Cycles）。因为通常可以用秒或周期数来衡量时间。这是用来读取占用率的指标。这里测量一个叫做分支效率（Branch Efficiency）的东西，将在关于分支发散（Branch Divergence）的章节中讨论它。今天不需要关注那个，但只是想提前开始了解。这个叫做分支效率。
+\begin{lstlisting}
+nvcc -o test_01 test_01.cu
+./test_01 256
+\end{lstlisting}
 
-最后有 DRAM 吞吐量。DRAM 吞吐量是通过内存每秒访问的千兆字节数（GB/s）来衡量的。需要知道这个应用程序的执行时间是多少秒，并使用该值来计算 DRAM 吞吐量。时间会影响 DRAM 吞吐量，因为吞吐量是通过每秒千兆字节数来衡量的。工具会帮做这件事，但只是在解释所有东西，这些就是指标。把它们写了两次，一次在这里，另一次在这里，但每个都有其用途，这个将和 NCU 一起使用。如果还记得，可以来到这里，像这样写 \texttt{ncu}，然后两个短横线 \texttt{--metrics}，就像在上一节讨论的那样。
+\subsection{Python 自动化分析脚本}
 
-然后可以在这里列出所有这些指标，如所示，得到了所有值。但在这里只是使用 Python 文件来为不同的块大小做这个，而不仅仅是一个。复制所有这些，把它们夹在这里，然后点击回车。不想看着终端显示很多表格，然后把这些值复制到 Excel 表格中再进行比较。需要 Python 脚本来完成所有这些。这就是为什么这里准备了 Python 脚本。可以用这个，但需要它们作为一个数组。如所示，使用这里的 header 变量来为从这个 Python 脚本输出的 CSV 文件创建一个表头。然后这里打开输出文件，以便在运行 NCU 时存储这些指标名称及其值。
+若手动对 32 组配置逐一运行 \texttt{ncu}、再人工抄录指标到 Excel，既耗时又易错。正确的做法是用 Python 脚本驱动 \texttt{ncu} 完成全部采集、解析与绘图。脚本需采集的指标及其含义如下：
 
-然后对于每个块大小，从 32 开始，因为最小的块大小是一个 Warp。从 32 个线程开始，一直到 1024。一个 Warp 由 32 个线程组成，并且取最大值 1024，因为根据白皮书，不能使用超过这个数字的块大小。
+\begin{center}
+\begin{tabular}{|p{6.8cm}|p{5.2cm}|}
+\hline
+\textbf{ncu 指标名} & \textbf{含义} \\
+\hline
+\texttt{\seqsplit{gpu\_\_time\_duration.avg}} & 核函数执行时间（纳秒） \\
+\hline
+\texttt{\seqsplit{sm\_\_cycles\_active.avg}} & 活动周期数 \\
+\hline
+\texttt{\seqsplit{l1tex\_\_t\_sector\_hit\_rate.pct}} & L1/纹理缓存扇区命中率 \\
+\hline
+\texttt{\seqsplit{lts\_\_t\_sector\_hit\_rate.pct}} & L2 缓存扇区命中率 \\
+\hline
+\texttt{\seqsplit{sm\_\_warps\_active.avg.pct\_of\_peak\_sustained\_active}} & 已实现占用率 \\
+\hline
+\texttt{\seqsplit{smsp\_\_sass\_average\_branch\_targets\_threads\_uniform.pct}} & 分支效率 \\
+\hline
+\texttt{\seqsplit{dram\_\_throughput.max.pct\_of\_peak\_sustained\_elapsed}} & DRAM 吞吐量占峰值比 \\
+\hline
+\end{tabular}
+\end{center}
 
-如果还记得在硬件章节，是第二节或第一节。说过根据白皮书，不能使用超过 1024 个线程的块大小。然后这里创建命令，这里是 1024。因为范围在这里，所以只需要在 1024 上加 1，以确保在 for 循环中包含 1024 这个值。
+完整的自动化分析脚本 \texttt{get\_insight.py} 如下。它对每个块大小构造 \texttt{ncu --metrics ... --csv} 命令，用 \texttt{subprocess} 执行，解析 CSV 输出提取指标值，写入 \texttt{results.csv}，最后用 matplotlib 绘制各指标随块大小变化的图表：
 
-这是命令，如果看这里，它和这里的命令完全一样，将使用这个变量，而不是写出所有指标。但没有尝试这些指标，因为一开始已经在这里写了，如所示。如所示，在这里使用这个变量，然后这是可执行文件。这里添加块大小，块大小如所示，范围从 32 到 1024，步长为 32。即是 32、64、96、128，以此类推，每一步增加一个 Warp 或增加 32 个线程。
+\begin{lstlisting}[language=Python]
+#!/usr/bin/env python3
+"""
+get_insight.py -- 自动化性能分析脚本
 
-然后这里这是一条 Python 指令，用于运行这个命令。这完全等同于执行这里的这个即按回车执行这个命令。这就是在 Python 编程中执行终端命令的方式。这只是一个 \texttt{print}，然后这只是一个 \texttt{print}，用于显示当前正在为这个块大小运行的信息。这意味着这里的输出或这里的表格将被存储在 result 变量中。然后当执行这个 NCU 命令时，获取输出并将其存储在 result 变量中。现在需要做的就是从这个输出中读取指标名称及其值，并将它们全部存储在一个文件中。
+使用 Nsight Compute CLI (ncu) 对不同块大小的 CUDA 核函数
+采集性能指标，导出 CSV 并绘制指标随块大小变化的图表。
 
-需要分割这个 result 变量。把它们全部存储在这里的输出文件中，在这个 CSV 文件中分成不同的行。然后遍历拥有的所有行，逐行读取。对于每一行将查看或检查指标名称。一旦有了一个指标名称，就尝试读取它的值。
+用法:  python3 get_insight.py [可执行文件]
+示例:  python3 get_insight.py ./test_01
+"""
 
-一旦有了值，需要将这个值存储到输出文件中。这里有很多细节，这些细节只是为了去除所有不需要的东西。因为如果看一下输出，例如不需要所有这些。只需要指标名称和它的值。如果这样做，会发现它比这个表格更奇怪。
+import csv
+import io
+import os
+import subprocess
+import sys
 
-顺便说一下，如果重复运行，因为在这里使用两个短横线 \texttt{--csv} 来确保它们以 CSV 文件格式显示，而不是表格。看到它是什么样子了吗？需要去掉这个逗号，需要去掉这个双引号等。所有这些只是为了去除不需要的任何东西，或者只是从输出中移除它。
+import matplotlib.pyplot as plt
 
-从这个文件中需要的就是这两样东西：指标名称和它的值。然后需要的是获取指标值，并将其存储在输出文件中。一旦在输出文件中有了所有内容，只是提一下具体存储在哪里。
+# ---- 配置 ----
+# 目标可执行文件（运行时接受块大小作为第一个命令行参数）
+EXECUTABLE = sys.argv[1] if len(sys.argv) > 1 else "./test_01"
 
-是的，打开输出文件，从这里开始写表头，需要看到写入表头。看到表头了吗？因为表头应包含块大小以及每个指标的名称。是的，这里尝试获取指标值，然后将其写入输出文件。然后应该看到另一个写入指令来写入值，然后这里需要绘制每个指标随块大小变化的关系图，意思是将块大小从 32 改到 1024，与例如周期数的关系等。需要绘制所有这些，这就是在这里做的。
+# 块大小范围: 32(一个 Warp) 到 1024(最大块大小), 步长 32
+BLOCK_SIZES = list(range(32, 1025, 32))
 
-需要在图表中显示块大小与占用率的关系，与时间的关系，与执行时间的关系，块大小增加。
+# 待采集的指标: (ncu 指标名, 图表显示标签)
+METRICS = [
+    ("gpu__time_duration.avg",
+     "GPU Time Duration"),
+    ("sm__cycles_active.avg",
+     "Active Cycles"),
+    ("l1tex__t_sector_hit_rate.pct",
+     "L1 Hit Rate (%)"),
+    ("lts__t_sector_hit_rate.pct",
+     "L2 Hit Rate (%)"),
+    ("sm__warps_active.avg.pct_of_peak_sustained_active",
+     "Achieved Occupancy (%)"),
+    ("smsp__sass_average_branch_targets_threads_uniform.pct",
+     "Branch Efficiency (%)"),
+    ("dram__throughput.max.pct_of_peak_sustained_elapsed",
+     "DRAM Throughput (%)"),
+]
+
+# 逗号分隔的指标名列表, 传给 ncu --metrics
+METRIC_NAMES = ",".join(m[0] for m in METRICS)
+
+OUTPUT_CSV = "results.csv"
+OUTPUT_DIR = "charts"
+
+
+def run_ncu(block_size):
+    """对单个块大小执行 ncu, 返回 CSV 文本输出。"""
+    cmd = [
+        "ncu",
+        "--metrics", METRIC_NAMES,
+        "--csv",
+        EXECUTABLE, str(block_size),
+    ]
+    print(f"[*] Profiling block size = {block_size} ...")
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    return proc.stdout
+
+
+def parse_metrics(csv_text):
+    """从 ncu 的 --csv 输出中提取 {指标名: 数值} 字典。"""
+    # 过滤 ==PROF== 等非 CSV 行
+    lines = [ln for ln in csv_text.splitlines()
+             if not ln.startswith("==PROF==") and ln.strip()]
+    if not lines:
+        return {}
+    reader = csv.reader(io.StringIO("\n".join(lines)))
+    header = next(reader)
+    # 定位 Metric Name 与 Metric Value 列
+    idx_name = header.index("Metric Name")
+    idx_value = header.index("Metric Value")
+    result = {}
+    for row in reader:
+        if len(row) <= max(idx_name, idx_value):
+            continue
+        result[row[idx_name]] = row[idx_value]
+    return result
+
+
+def main():
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+    # CSV 表头: Block Size + 各指标标签
+    header = ["Block Size"] + [label for _, label in METRICS]
+    rows = []
+
+    for bs in BLOCK_SIZES:
+        csv_text = run_ncu(bs)
+        values = parse_metrics(csv_text)
+        row = [bs]
+        for metric_name, _ in METRICS:
+            row.append(values.get(metric_name, ""))
+        rows.append(row)
+
+    # 写入 results.csv
+    with open(OUTPUT_CSV, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(header)
+        writer.writerows(rows)
+    print(f"[+] CSV 已写入 {OUTPUT_CSV}")
+
+    # 逐指标绘图
+    block_sizes = [r[0] for r in rows]
+    for metric_name, label in METRICS:
+        ys = []
+        for r in rows:
+            try:
+                ys.append(float(r[header.index(label)]))
+            except (ValueError, TypeError):
+                ys.append(0.0)
+        plt.figure(figsize=(8, 5))
+        plt.plot(block_sizes, ys, marker="o")
+        plt.xlabel("Block Size")
+        plt.ylabel(label)
+        plt.title(f"{label} vs Block Size")
+        plt.grid(True)
+        fname = label.replace(" ", "_").replace("/", "_")
+        out = os.path.join(OUTPUT_DIR, f"{fname}.png")
+        plt.savefig(out, dpi=120)
+        plt.close()
+        print(f"[+] 图表已保存 {out}")
+
+
+if __name__ == "__main__":
+    main()
+\end{lstlisting}
+
+运行脚本即可一次性完成全部采集与绘图：
+
+\begin{lstlisting}
+python3 get_insight.py ./test_01
+\end{lstlisting}
+
+脚本的工作流程为：对每个块大小（32、64、96、\ldots、1024）构造 \texttt{ncu --metrics <指标列表> --csv ./test\_01 <块大小>} 命令；用 \texttt{subprocess.run} 执行并将标准输出存入 \texttt{result}；过滤掉 \texttt{==PROF==} 前缀的非 CSV 行后，用 \texttt{csv} 模块按 \texttt{Metric Name} 与 \texttt{Metric Value} 列提取指标值；将每个块大小对应的指标值写入 \texttt{results.csv} 的一行；最后为每个指标绘制一张"指标值 vs 块大小"的折线图并保存为 PNG。\texttt{--csv} 选项使输出以逗号分隔而非表格，便于程序解析。
 
 \subsection{分析结果图表}
 
-运行，这就是全部的内容。在纵轴上绘制所有指标，在 X 轴上应该是块大小。想象一下从 32 到 1024 步长为 32，这大概有 15 次左右。
+脚本生成的三组关键图表如图~\ref{fig:ch31-time}--\ref{fig:ch31-mem} 所示。图~\ref{fig:ch31-time} 展示执行时间与活动周期数随块大小的变化：块大小为 32（即每块一个 Warp）时二者显著高于其他配置，说明此时执行效率最差；块大小增至 64 之后，时间与周期数迅速下降并趋于平稳。
 
-将添加这个 Python 脚本，以便不仅可以将它用于这个应用程序。因为只是给出一个如何分析许多配置的想法，只需一次运行。因为想象一下在这里运行了多少次。
-
-来到这里使用这个命令 15 次，然后手动读取这些值并把它们放进文件，这是非常困难的，将会花费太多时间。而且如果想用不同的配置再次重复它也会非常累人。这就是 Python 文件的样子，以及这里需要做的所有事情。
-
-需要做的就是来到这里输入 \texttt{python3}，文件名是 \texttt{get\_insight.py}，然后按回车。
-
-它将为所有步骤或所有迭代重复运行。现在正在为块大小 32 运行。可以在这里看到这个 \texttt{print} 通过这条指令体现出来。这就是从这个脚本中需要的全部。一旦它完成了所有迭代，脚本将给出一些图表。除此之外，想再看另一个文件，需要查看图表，看看块大小的变化如何影响不同的性能指标。现在完成了，输入 \texttt{ls}，但不想让你困惑，所以等等看从这个输出中能得到什么。看看这些图表里的内容。
-
-如所示，有一些图表，所以想到这里，在第一个图表里有 GPU 时间、执行时间和周期数。看看第一步或第一次迭代，其中块大小是 32 个线程或一个 Warp。如所示，对于两者——时间和活动周期——与其他所有迭代相比，都有更大的值。当每个块使用一个 Warp 时，得到了更长的执行时间。如在此所示，其他所有迭代中，这里只是稍微增加了一点，但大多数几乎相等。需要拿这个值和其他值进行比较，和其中任何一个值比较。这意味着需要进行一些性能分析，以理解为什么这里的执行时间比其他迭代长。
-
-看看这如何影响其他指标。这里有 L1 缓存和 L2 缓存。对于 L1 看到对于所有迭代它都是零。因为改变块大小并不会改变访问全局内存的方式，将访问相同的扇区（Sector）或相同的字节。这就是为什么 L1 缓存是恒定的且等于 0，但在这个应用程序中没有那样做。如果改变例如步长（Stride），即每两个元素之间的步长，这可能会改变。
-
-好的，这里 L2 大约等于 33 点几，它略有变化或变化很小，但几乎相同。在这个图表里没有看到任何变化。再次只是想说明，这里有块大小，这里是指标值，L1 命中率和 L2 命中率。因为如果看核函数时间，可以看到第一个值很大，而所有其他值都很小。
-
-看最后一个，如所示，内存带宽与核函数时间成反比关系。对于内存带宽和 Warp 活动度或 Warp 占用率，可以在这里看到相反的情况。可以看到第一个值很小，但所有其他值都很高。那么开始做吧，这就是为什么需要关注第一个值，并拿例如第二个值对两者进行一些性能分析。来到这里说，例如需要输入 \texttt{ncu}，需要的是 \texttt{./test.exe}，然后输入 32。
-
-需要看看当块大小是 32 个线程时，不同的部分（Section）是什么样的。网格大小（Grid Size）指的是这个应用程序中所有的块。这些是部分，需要看的是块大小，如所示是 32，然后是网格大小。这是一个很大的数字，因为有数百万个元素需要相加。如果再看这里的应用程序，可以看到这些向量中每一个的大小是这个值，这是一个非常大的值。以及块大小，如所说是 32 个线程。如果有这个数量的元素，这是一个很大的数字，而只有 32 个线程。如果用这个除以这个就得到块数，这就是得到块数的方法。
-
-总之对于每一个网格的块数，通常使用这个公式：总大小加每个块的线程数减一，除以每个块的线程数。而这个应用程序结合给每个块的线程数的值，两者共同给出了在这个应用程序中需要的线程总数。这给了每个网格正确的块数。因为记住，想确保应用程序中的线程总数等于要相加的元素总数。
-
-总之，这里需要做的是取这个值和这个值，并把它们放在这里。如所示，每当在应用程序中使用块大小 32 时，总块数将是这里的这个值。那么在应用程序中有多少个活动块（Active Blocks）呢？
-
-如果还记得在上一节解释了"已分配活动块"（Allocated Active Blocks）这个术语，并且说过这真的非常重要。在继续本章之前，需要先看那个章节。总之具体在哪里可以找到这个值？有 16、128、48，可以来到这里进入占用率部分，然后取这四个值中最小的那个。已分配活动块的数量将是 16。这就是为什么这里加了 16。很好，使用 CUDA API，可以获取 GPU 上可用的 SM 数量。在 GPU 上，得到的数量是 38 个 SM。
-
-\begin{figure}
+\begin{figure}[H]
     \centering
     \includegraphics[width=0.75\linewidth]{resources/cuda-114.png}
-    \caption{}
-    \label{fig:placeholder}
+    \caption{GPU 执行时间（\texttt{gpu\_\_time\_duration.avg}）与活动周期数（\texttt{sm\_\_cycles\_active.avg}）随块大小变化：块大小 32 时显著偏高，64 之后趋于平稳}
+    \label{fig:ch31-time}
 \end{figure}
 
-\begin{figure}
+\begin{figure}[H]
     \centering
     \includegraphics[width=0.75\linewidth]{resources/cuda-115.png}
-    \caption{}
-    \label{fig:placeholder}
+    \caption{L1 与 L2 纹理扇区命中率（\texttt{l1tex\_\_t\_sector\_hit\_rate.pct}、\texttt{lts\_\_t\_sector\_hit\_rate.pct}）随块大小变化：L1 恒为 0\%（未使用共享内存），L2 约 33\%，几乎不随块大小改变}
+    \label{fig:ch31-l1l2}
 \end{figure}
 
+图~\ref{fig:ch31-l1l2} 中 L1 命中率恒为 0\% 是预期的：改变块大小并不改变访问全局内存的方式，每个线程仍访问相同的扇区；只有改变访问步长（Stride）或引入共享内存分块才会影响命中率。L2 命中率约 33\% 且变化很小，印证了这一点。
 
-\begin{figure}
+\begin{figure}[H]
     \centering
     \includegraphics[width=0.75\linewidth]{resources/cuda-116.png}
-    \caption{}
-    \label{fig:placeholder}
+    \caption{已实现占用率、分支效率与 DRAM 吞吐量随块大小变化：块大小 32 时占用率与 DRAM 吞吐量最低，与执行时间最长相互印证}
+    \label{fig:ch31-mem}
 \end{figure}
 
+图~\ref{fig:ch31-mem} 中，块大小 32 时占用率与 DRAM 吞吐量均为最低，与其执行时间最长形成对照——这正是性能瓶颈的信号。后续将逐一剖析原因。
 
 \subsection{波次与执行时间分析}
 
-现在想计算波次（Wave）数量，这里需要了解更多关于波次定义的信息。说过已分配活动块的数量通常指的是可以在一个 SM 中同时运行的块的数量。意思是在那种情况下，可以同时运行 16 个块在每个 SM 上。但是记住块的总数不是 16、32 甚至 64，而是超过 100 万。从那个巨大的数字中，可以在每个 SM 上同时运行 16 个，那么剩下的块怎么办？这就是所说的波次。
+要理解块大小 32 为何最慢，需引入\textbf{波次（Wave）}的概念。波次指一个 SM 在同一时刻能够同时驻留并调度的块数，其上限即占用率分析中的"已分配活动块数"（Allocated Active Blocks）。本例 GPU 有 38 个 SM，每 SM 的已分配活动块数为 16。
 
-例如除以这个值，将这个值也就是总块数除以 16。说过可以同时运行 16 个。然后除以 SM 的数量，因为讨论的是一个 SM。这就是在应用程序中，每个 SM 将要运行的波次数量。
+以块大小 32 为例，总块数为 $N / 32$（数百万）。每个 SM 分担的块数为：
 
-再重复一遍，当这个应用程序启动时，它从这个数字中取出 16 个块交给第一个 SM，意思是对于这里的每个时间点，每个波次，将在每个 SM 上运行 16 个块。同样的情况也适用于所有其他 SM。一旦这些 SM 中的任何一个完成了它的 16 个块，就意味着它完成了第一个波次。那么它会请求另一个波次，它会请求另外 16 个块。
+\[
+\text{每 SM 块数} = \frac{\text{总块数}}{\text{SM 数}} = \frac{N / 32}{38}
+\]
 
-情况就是这样，看一下这里，这是 SM，这是第一个波次。如所示，有 16 个块 ID，从 0 到 15。一旦完成了所有这些块，SM 就可以获取另一个波次，可以获取另外 16 个块。但是再次当执行第一个波次时，不能获取这些块中的任何一个。即使所有这些块都因依赖而停顿，因内存操作而停顿或因任何其他原因停顿，同时只能有 16 个块在每个 SM 上。一旦完成那个波次，可以再获取 16 个块，就是这样。
+由于每 SM 同时只能驻留 16 个块，剩余块必须排队等待，分多个波次依次执行：
 
-这个术语非常重要，将解释它是如何重要的。总之这是使用块大小 32 的情况。如果使用块大小 64，这些是数字，又运行了 NCU 来获取总块数，这是总块数。为什么这里的总块数是那个数字的一半？这很简单，如果增加每个块的线程数，就必须减少总块数。因为说过总块数结合每个块的大小，每个块的大小应该等于应用程序中元素的总数。
+\[
+\text{每 SM 波次数} = \frac{\text{每 SM 块数}}{16}
+\]
 
-这就是它的工作原理。现在需要知道有多少个波次。再次只是想展示第一种情况的波次数量，看这里，看到这个数字了吗？每个 SM 的波次数量，可以从这里检查它，这完全是同一个数字。
-
-回到这里除以这个值，这是总块数。应用程序中的所有块，所有这些块都应该在 38 个 SM 上执行。需要知道每个 SM 将执行多少个块，这就是需要做的。复制这个值并除以 38。那样的话，每个 SM 应该执行超过 13000 个块。
-
-但不能同时执行所有这些块，可以在不同的波次中调度所有这些块。每个波次由 16 个块组成，需要用 16 除这个数以得到每个 SM 的波次数量。如所示是 862，如果在这里运行 NCU，会发现完全相同的数字。如所示是 862。
-
-只是想在这里提一下波次数量，因为需要很好地理解它。总之回到第二张幻灯片，因为它非常重要。说过这种情况的执行时间比第二种情况的执行时间长。还记得在这里吗？不在这里，是在这个图表里。回头看看，还记得执行时间或活动周期数吗？对于块大小 32，它比块大小 64 的大，这没关系。
-
-那么需要理解为什么情况是这样的。
+用 \texttt{ncu} 采集可得每 SM 波次数，与上式计算结果一致。当块大小增至 64 时，总块数减半，每 SM 块数减半，但每块含 2 个 Warp，单波次内可调度的 Warp 数翻倍——这正是性能差异的根源。
 
 \subsection{块大小对性能的影响}
 
-想象有一个 GPU，两者都在执行同一个应用程序，但使用不同的块大小。想象将只分析 38 个 SM 中的一个 SM。在这种情况下有一个 SM，在这种情况下也有这个 SM，但区别在于——并且在两种情况下都有 16 个已分配活动块。确认一下。是的，如果看这里的占用率部分，可以看到这四个值的最小值是 16。在两种情况下已分配活动块的数量都是 16。这两条线代表一个 Warp，这就是为什么这里有 16 个从 0 到 15，这里也是从 0 到 15。
+设想同一 SM 在块大小 32 与 64 两种配置下：两种情况的已分配活动块数都是 16，但块大小 32 的每个块仅含 1 个 Warp，而块大小 64 的每个块含 2 个 Warp。
 
-这里有两个 Warp，为什么？因为这个块由 64 个线程组成，块大小是 64，而一个 Warp 等于 32 个线程，这就是为什么这个块比这个大。如果用 32 除这个，那么每个块就有两个 Warp。
+核函数中存在内存操作（\texttt{LDG.E} 加载）与依赖它的加法（\texttt{IADD3}）之间的数据依赖。内存操作的延迟远高于算术操作：L1 命中约 30 周期，L2 命中约 200 周期，全局内存命中可达 300--400 周期。当某个 Warp 因等待内存结果而停顿时：
 
-想象有一个内存操作（红色的那个）以及一个依赖于该内存操作的加法操作。在这种情况下，每个块将执行内存操作，并会等待内存操作完成。而内存操作通常比 GPU 中的算术操作花费更长时间。如果在 L1 缓存命中它可能花费 30 个周期，或者如果在 L2 缓存命中大约 200 个周期，或者如果在全局内存命中 300 或 400 个周期。但这里有依赖关系，一旦因这个依赖而停顿，SM 将不会执行任何操作。
+\begin{itemize}
+    \item \textbf{块大小 32}：每块仅 1 个 Warp，该 Warp 停顿后，SM 在该块内无其他 Warp 可调度，只能空转或切换到其他块，停顿隐藏能力弱。
+    \item \textbf{块大小 64}：每块 2 个 Warp，一个 Warp 停顿时，SM 可立即调度同块的另一个 Warp 继续执行，有效隐藏内存延迟，总执行时间更短。
+\end{itemize}
 
-所有 Warp 或所有块都会停滞。但这里有不同的 Warp。如果这里的第一个 Warp 因任何原因停顿，SM 可以获取第二个 Warp 并执行它。可以在不同的 Warp 之间进行调度，以确保最小化 SM 内发生的停顿次数。这就是为什么当块大小是 64 时，总执行时间比块大小是 32 时要短。不过将在后续章节中进行更多的性能分析。
+这解释了图表中块大小 32 的执行时间与活动周期数显著偏高、而 64 之后趋于平稳的现象。核心结论是：\textbf{块大小决定了每块内的 Warp 数，进而决定了 SM 通过 Warp 调度隐藏延迟的能力}。后续章节将围绕这一机制展开更深入的性能优化实践。
+
+\subsection{本章小结}
+
+\begin{itemize}
+    \item 性能分析应系统化：以块大小为变量、以 \texttt{ncu} 采集的指标为观测量，用 Python 脚本自动化完成采集、解析与绘图，避免人工重复操作。
+    \item \texttt{get\_insight.py} 通过 \texttt{subprocess} 驱动 \texttt{ncu --metrics ... --csv}，用 \texttt{csv} 模块解析输出，写入 \texttt{results.csv} 并用 matplotlib 绘图，可复用于任意 CUDA 应用程序。
+    \item 块大小 32（每块一个 Warp）时执行时间最长，原因是 SM 内可调度的 Warp 数不足，无法有效隐藏内存延迟；块大小增至 64 后，每块多 Warp 使延迟隐藏能力增强，性能趋于平稳。
+    \item 波次数 = 每 SM 块数 / 已分配活动块数，是衡量核函数在 SM 上分批执行规模的关键指标。
+\end{itemize}

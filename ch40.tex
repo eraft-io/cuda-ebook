@@ -110,9 +110,9 @@ nvcc -G -g -arch=sm\_80 reduce.cu -o reduce\_debug
 \hline
 \textbf{配置} & \textbf{带过滤器（安全）} & \textbf{无过滤器（有竞态）} \\
 \hline
-Release (-O2) & ✅ 正确，速度快 & ❌ 错误（优化放大竞争窗口），速度快 \\
+Release (-O2) & 正确，速度快 & 错误（优化放大竞争窗口），速度快 \\
 \hline
-Debug (-G) & ✅ 正确，速度慢 & ⚠️ 恰好正确（时序固定），速度慢 \\
+Debug (-G) & 正确，速度慢 & 恰好正确（时序固定），速度慢 \\
 \hline
 \end{tabular}
 \end{center}
